@@ -4,5 +4,11 @@ CARGO_OPTS := --color always
 check build run:
 	cargo $(CARGO_OPTS) $@ --features="$(FEATURES)"
 
+RELEASE_RUSTFLAGS := "-C link-arg=-s"
+
 release:
-	RUSTFLAGS="-C link-arg=-s" cargo build --release
+	RUSTFLAGS=$(RELEASE_RUSTFLAGS) cargo build --release
+
+release-run:
+	RUSTFLAGS=$(RELEASE_RUSTFLAGS) cargo run --release
+
