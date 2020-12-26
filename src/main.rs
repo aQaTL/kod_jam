@@ -1,5 +1,7 @@
 use bevy::prelude::*;
 
+mod menu;
+
 static GAME_NAME: &str = "TODO: Wymyśl jakąś nazwę";
 
 #[bevy_main]
@@ -8,7 +10,6 @@ fn main() {
 		.add_plugins(DefaultPlugins)
 		.add_plugin(GamePlugin)
 		.add_startup_system(setup_window.system())
-		.add_resource(State::new(GameState::Game))
 		.run();
 }
 
@@ -22,15 +23,25 @@ fn setup_window(mut windows: ResMut<Windows>) {
 #[derive(Clone, Copy)]
 enum GameState {
 	Game,
+	Menu,
 }
 
 struct GamePlugin;
 
+impl GamePlugin {
+    const STAGE: &'static str = "game_stage";
+}
+
 impl Plugin for GamePlugin {
 	fn build(&self, app: &mut AppBuilder) {
-		app.add_startup_system(setup_game.system())
-			.add_startup_stage("game_setup", SystemStage::single(spawn_entities.system()))
-			.add_system(player_movement.system());
+		app
+			.add_startup_system(setup_game.system())
+			.add_resource(State::new(GameState::Game))
+			.add_stage_after(stage::UPDATE, Self::STAGE, StateStage::<GameState>::default())
+			.on_state_enter(Self::STAGE, GameState::Game, spawn_entities.system())
+			.on_state_update(Self::STAGE, GameState::Game, player_movement.system())
+			.on_state_enter(Self::STAGE, GameState::Menu, menu::setup_menu.system())
+			.on_state_exit(Self::STAGE, GameState::Menu, menu::destroy_menu.system());
 	}
 }
 
