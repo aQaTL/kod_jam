@@ -32,12 +32,15 @@ impl Plugin for GamePlugin {
 			.add_startup_stage("game_setup", SystemStage::single(spawn_entities.system()))
 			.add_system(player_movement.system())
 			.add_system(size_scaling.system())
-			.add_system(player_scaling.system());
+			.add_system(player_scaling.system())
+			.add_system(switching_textures.system())
+			.add_resource(ClearColor(Color::rgb_u8(0, 43, 54)));
 	}
 }
 
 struct Textures {
 	player_texture: Handle<ColorMaterial>,
+	player_texture_mini: Handle<ColorMaterial>,
 }
 
 fn setup_game(
@@ -48,25 +51,34 @@ fn setup_game(
 	let player_texture: Handle<Texture> = asset_server.load("bird.png");
 	let player_texture: Handle<_> = materials.add(player_texture.into());
 
+	let player_texture_mini: Handle<Texture> = asset_server.load("bird_mini.png");
+	let player_texture_mini: Handle<_> = materials.add(player_texture_mini.into());
+
 	commands
 		.spawn(Camera2dBundle::default())
-		.insert_resource(Textures { player_texture });
+		.insert_resource(Textures {
+			player_texture,
+			player_texture_mini,
+		});
 }
 
 fn spawn_entities(commands: &mut Commands, materials: Res<Textures>) {
 	commands
 		.spawn(SpriteBundle {
 			material: materials.player_texture.clone(),
-			transform: Transform {
-				translation: Default::default(),
-				rotation: Quat::default(),
-				scale: Vec3::new(0.1, 0.1, 0.1),
-			},
+			// transform: Transform {
+			// 	translation: Default::default(),
+			// 	rotation: Quat::default(),
+			// 	scale: Vec3::new(0.1, 0.1, 0.1),
+			// },
 			..Default::default()
 		})
 		.with(Player)
 		.with(Position { x: 3, y: 3 })
-		.with(Size { width: 0.8, height: 0.8 });
+		.with(Size {
+			width: 0.8,
+			height: 0.8,
+		});
 }
 
 struct Player;
@@ -91,7 +103,10 @@ fn player_movement(
 	}
 }
 
-fn player_scaling(kb_input: Res<Input<KeyCode>>, mut q: Query<(&mut Transform, &mut Sprite), With<Player>>) {
+fn player_scaling(
+	kb_input: Res<Input<KeyCode>>,
+	mut q: Query<(&mut Transform, &mut Sprite), With<Player>>,
+) {
 	for (mut transform, mut sprite) in q.iter_mut() {
 		if kb_input.pressed(KeyCode::Up) {
 			transform.scale.x += 0.1;
@@ -102,6 +117,29 @@ fn player_scaling(kb_input: Res<Input<KeyCode>>, mut q: Query<(&mut Transform, &
 			println!("Old sprite size x: {}", sprite.size.x);
 			sprite.size.x += 10.0;
 			println!("New sprite size x: {}", sprite.size.x);
+		}
+		if kb_input.pressed(KeyCode::L) {
+			sprite.resize_mode = SpriteResizeMode::Manual;
+			println!("Old sprite size x: {}", sprite.size.x);
+			sprite.size.x -= 10.0;
+			println!("New sprite size x: {}", sprite.size.x);
+		}
+	}
+}
+
+fn switching_textures(
+	kb_input: Res<Input<KeyCode>>,
+	mut q: Query<(&mut Handle<ColorMaterial>, &mut Sprite), With<Player>>,
+	player_textures: Res<Textures>,
+) {
+	for (mut player_material, mut sprite) in q.iter_mut() {
+		if kb_input.just_pressed(KeyCode::Space) {
+			if player_material.id == player_textures.player_texture.id {
+				*player_material = player_textures.player_texture_mini.clone();
+			} else {
+				*player_material = player_textures.player_texture.clone();
+			}
+			sprite.resize_mode = SpriteResizeMode::Automatic;
 		}
 	}
 }
