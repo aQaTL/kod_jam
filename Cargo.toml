@@ -8,3 +8,4 @@ license = "MIT"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+bevy = { git = "https://github.com/bevyengine/bevy.git", rev = "c32c78fc66be2a4a907784b2dcc552e7f9985f52" }
