@@ -62,8 +62,16 @@ impl Plugin for GamePlugin {
 				AppState::Game,
 				detect_portal_collision.system(),
 			)
-			.on_state_update(Self::STAGE, AppState::Game, detect_spikes_collision.system())
-			.on_state_update(Self::STAGE, AppState::Game, process_collision_events.system())
+			.on_state_update(
+				Self::STAGE,
+				AppState::Game,
+				detect_spikes_collision.system(),
+			)
+			.on_state_update(
+				Self::STAGE,
+				AppState::Game,
+				process_collision_events.system(),
+			)
 			.on_state_enter(Self::STAGE, AppState::Menu, menu::setup_menu.system())
 			.on_state_exit(Self::STAGE, AppState::Menu, menu::destroy_menu.system());
 	}
@@ -364,7 +372,7 @@ fn process_collision_events(
 	mut collision_event_reader: ResMut<CollisionEventReader>,
 	collision_events: Res<Events<CollisionEvent>>,
 ) {
-    for collision_event in collision_event_reader.0.iter(&collision_events) {
+	for collision_event in collision_event_reader.0.iter(&collision_events) {
 		println!("Collision detected with: {:?}", collision_event);
 	}
 }
