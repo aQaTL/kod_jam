@@ -7,17 +7,20 @@ static GAME_NAME: &str = "TODO: Wymyśl jakąś nazwę";
 #[bevy_main]
 fn main() {
 	App::build()
+		.add_resource(WindowDescriptor {
+			width: 1280.0,
+			height: 720.0,
+			title: GAME_NAME.to_string(),
+			vsync: false,
+			resizable: true,
+			decorations: true,
+			cursor_visible: true,
+			cursor_locked: false,
+			mode: bevy::window::WindowMode::Windowed,
+		})
 		.add_plugins(DefaultPlugins)
 		.add_plugin(GamePlugin)
-		.add_startup_system(setup_window.system())
 		.run();
-}
-
-fn setup_window(mut windows: ResMut<Windows>) {
-	windows
-		.get_primary_mut()
-		.expect("Expected to have a window")
-		.set_title(GAME_NAME.to_string())
 }
 
 #[derive(Clone, Copy)]
@@ -29,15 +32,18 @@ enum GameState {
 struct GamePlugin;
 
 impl GamePlugin {
-    const STAGE: &'static str = "game_stage";
+	const STAGE: &'static str = "game_stage";
 }
 
 impl Plugin for GamePlugin {
 	fn build(&self, app: &mut AppBuilder) {
-		app
-			.add_startup_system(setup_game.system())
+		app.add_startup_system(setup_game.system())
 			.add_resource(State::new(GameState::Game))
-			.add_stage_after(stage::UPDATE, Self::STAGE, StateStage::<GameState>::default())
+			.add_stage_after(
+				stage::UPDATE,
+				Self::STAGE,
+				StateStage::<GameState>::default(),
+			)
 			.on_state_enter(Self::STAGE, GameState::Game, spawn_entities.system())
 			.on_state_update(Self::STAGE, GameState::Game, player_movement.system())
 			.on_state_enter(Self::STAGE, GameState::Menu, menu::setup_menu.system())
