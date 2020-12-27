@@ -107,7 +107,7 @@ fn process_console_events(
 	console_events: Res<Events<ConsoleEvent>>,
 	mut q: Query<&mut ConsoleBuffer>,
 ) {
-	for console_event in console_event_reader.reader.iter(&console_events) {
+	for console_event in console_event_reader.0.iter(&console_events) {
 		match console_event {
 			ConsoleEvent::Log(log) => q.iter_mut().for_each(|mut buffer| buffer.0.push_str(&log)),
 		}
@@ -121,9 +121,7 @@ fn add_to_console(kb_input: Res<Input<KeyCode>>, mut console_events: ResMut<Even
 }
 
 #[derive(Default)]
-struct ConsoleEventReader {
-	reader: EventReader<ConsoleEvent>,
-}
+struct ConsoleEventReader(EventReader<ConsoleEvent>);
 
 pub enum ConsoleEvent {
 	Log(String),

@@ -46,6 +46,8 @@ impl Plugin for GamePlugin {
 			.add_resource(State::new(AppState::Game))
 			.add_resource(Level::hub())
 			.add_resource(InputState::default())
+			.add_resource(CollisionEventReader::default())
+			.add_event::<CollisionEvent>()
 			.add_stage_after(
 				stage::UPDATE,
 				Self::STAGE,
@@ -60,6 +62,8 @@ impl Plugin for GamePlugin {
 				AppState::Game,
 				detect_portal_collision.system(),
 			)
+			.on_state_update(Self::STAGE, AppState::Game, detect_spikes_collision.system())
+			.on_state_update(Self::STAGE, AppState::Game, process_collision_events.system())
 			.on_state_enter(Self::STAGE, AppState::Menu, menu::setup_menu.system())
 			.on_state_exit(Self::STAGE, AppState::Menu, menu::destroy_menu.system());
 	}
@@ -69,6 +73,7 @@ struct Textures {
 	player_texture: Handle<ColorMaterial>,
 	ground_tile: Handle<ColorMaterial>,
 	portal_texture: Handle<ColorMaterial>,
+	spikes_texture: Handle<ColorMaterial>,
 }
 
 fn setup_game(
@@ -85,6 +90,9 @@ fn setup_game(
 	let portal_texture: Handle<Texture> = asset_server.load("portal.png");
 	let portal_texture: Handle<_> = materials.add(portal_texture.into());
 
+	let spikes_texture: Handle<Texture> = asset_server.load("spikes.png");
+	let spikes_texture: Handle<_> = materials.add(spikes_texture.into());
+
 	commands
 		.spawn(Camera2dBundle {
 			transform: Transform {
@@ -97,6 +105,7 @@ fn setup_game(
 			player_texture,
 			ground_tile,
 			portal_texture,
+			spikes_texture,
 		});
 }
 
@@ -218,6 +227,8 @@ impl Level {
 #[derive(Debug)]
 struct PortalDestination(LevelType);
 
+struct Spikes;
+
 fn setup_level_hub(commands: &mut Commands, materials: Res<Textures>) {
 	info!("Spawning hub level entities");
 	commands
@@ -227,7 +238,6 @@ fn setup_level_hub(commands: &mut Commands, materials: Res<Textures>) {
 				translation: Vec3::new(3.0 * TILE_SIZE, 4.0 * TILE_SIZE, 0.0),
 				..Default::default()
 			},
-			global_transform: Default::default(),
 			..Default::default()
 		})
 		.with(PortalDestination(LevelType::Level1))
@@ -237,10 +247,23 @@ fn setup_level_hub(commands: &mut Commands, materials: Res<Textures>) {
 				translation: Vec3::new(-7.0 * TILE_SIZE, -5.0 * TILE_SIZE, 0.0),
 				..Default::default()
 			},
-			global_transform: Default::default(),
 			..Default::default()
 		})
 		.with(PortalDestination(LevelType::Secret1));
+
+	let spikes_locations = [(-1.0, 1.0), (-1.0, 2.0), (-3.0, -1.0)];
+	for (spike_x_idx, spike_y_idx) in spikes_locations.iter() {
+		commands
+			.spawn(SpriteBundle {
+				material: materials.spikes_texture.clone(),
+				transform: Transform {
+					translation: Vec3::new(spike_x_idx * TILE_SIZE, spike_y_idx * TILE_SIZE, 0.0),
+					..Default::default()
+				},
+				..Default::default()
+			})
+			.with(Spikes);
+	}
 }
 
 // TODO: Brightness should probably be changed differently
@@ -292,5 +315,56 @@ fn detect_portal_collision(
 				println!("player entered portal to {:?}", portal_destination);
 			}
 		}
+	}
+}
+
+fn detect_spikes_collision(
+	portals: Query<(&Transform, &PortalDestination), With<PortalDestination>>,
+	players: Query<&Transform, (With<Player>, Changed<Transform>)>,
+) {
+	for player in players.iter() {
+		println!();
+		let (a_x1, a_y1) = (
+			player.translation.x - TILE_SIZE / 2.0,
+			player.translation.y - TILE_SIZE / 2.0,
+		);
+		let (a_x2, a_y2) = (
+			player.translation.x + TILE_SIZE / 2.0,
+			player.translation.y + TILE_SIZE / 2.0,
+		);
+		for (portal, portal_destination) in portals.iter() {
+			let (b_x1, b_y1) = (
+				portal.translation.x - TILE_SIZE / 2.0,
+				portal.translation.y - TILE_SIZE / 2.0,
+			);
+			let (b_x2, b_y2) = (
+				portal.translation.x + TILE_SIZE / 2.0,
+				portal.translation.y + TILE_SIZE / 2.0,
+			);
+			println!("player: {},{} x {},{}", a_x1, a_y1, a_x2, a_y2);
+			println!("portal: {},{} x {},{}", b_x1, b_y1, b_x2, b_y2);
+			// TODO: detect intersection
+			if false {
+				println!("player touched spikes");
+			}
+		}
+	}
+}
+
+#[derive(Debug)]
+enum CollisionEvent {
+	Portal(PortalDestination),
+	Spikes,
+}
+
+#[derive(Default)]
+struct CollisionEventReader(EventReader<CollisionEvent>);
+
+fn process_collision_events(
+	mut collision_event_reader: ResMut<CollisionEventReader>,
+	collision_events: Res<Events<CollisionEvent>>,
+) {
+    for collision_event in collision_event_reader.0.iter(&collision_events) {
+		println!("Collision detected with: {:?}", collision_event);
 	}
 }
