@@ -1,4 +1,6 @@
 use bevy::prelude::*;
+use bevy::input::mouse::MouseWheel;
+use bevy::render::camera::Camera;
 
 mod menu;
 
@@ -24,7 +26,7 @@ fn main() {
 }
 
 #[derive(Clone, Copy)]
-enum GameState {
+enum AppState {
 	Game,
 	Menu,
 }
@@ -38,21 +40,25 @@ impl GamePlugin {
 impl Plugin for GamePlugin {
 	fn build(&self, app: &mut AppBuilder) {
 		app.add_startup_system(setup_game.system())
-			.add_resource(State::new(GameState::Game))
+			.add_resource(State::new(AppState::Game))
+			.add_resource(Level::hub())
+			.add_resource(InputState::default())
 			.add_stage_after(
 				stage::UPDATE,
 				Self::STAGE,
-				StateStage::<GameState>::default(),
+				StateStage::<AppState>::default(),
 			)
-			.on_state_enter(Self::STAGE, GameState::Game, spawn_entities.system())
-			.on_state_update(Self::STAGE, GameState::Game, player_movement.system())
-			.on_state_enter(Self::STAGE, GameState::Menu, menu::setup_menu.system())
-			.on_state_exit(Self::STAGE, GameState::Menu, menu::destroy_menu.system());
+			.on_state_enter(Self::STAGE, AppState::Game, spawn_entities.system())
+			.on_state_update(Self::STAGE, AppState::Game, player_movement.system())
+			.on_state_update(Self::STAGE, AppState::Game, camera_input.system())
+			.on_state_enter(Self::STAGE, AppState::Menu, menu::setup_menu.system())
+			.on_state_exit(Self::STAGE, AppState::Menu, menu::destroy_menu.system());
 	}
 }
 
 struct Textures {
 	player_texture: Handle<ColorMaterial>,
+	ground_tile: Handle<ColorMaterial>,
 }
 
 fn setup_game(
@@ -63,43 +69,98 @@ fn setup_game(
 	let player_texture: Handle<Texture> = asset_server.load("bird.png");
 	let player_texture: Handle<_> = materials.add(player_texture.into());
 
+	let ground_tile: Handle<Texture> = asset_server.load("ground.png");
+	let ground_tile: Handle<_> = materials.add(ground_tile.into());
+
 	commands
-		.spawn(Camera2dBundle::default())
-		.insert_resource(Textures { player_texture });
+		.spawn(Camera2dBundle {
+			transform: Transform {
+				scale: Vec3::new(0.3, 0.3, 1.0),
+				..Default::default()
+			},
+			..Default::default()
+		})
+		.insert_resource(Textures {
+			player_texture,
+			ground_tile,
+		});
 }
 
-fn spawn_entities(commands: &mut Commands, materials: Res<Textures>) {
+fn spawn_entities(commands: &mut Commands, materials: Res<Textures>, level: Res<Level>) {
 	commands
 		.spawn(SpriteBundle {
 			material: materials.player_texture.clone(),
 			transform: Transform {
 				translation: Default::default(),
 				rotation: Quat::default(),
-				scale: Vec3::new(0.1, 0.1, 0.1),
+				scale: Vec3::new(0.04, 0.04, 1.0),
 			},
 			..Default::default()
 		})
 		.with(Player);
+
+	for j in 0..(level.size.y as u32) {
+		for i in 0..(level.size.x as u32) {
+			let (j, i) = (j as f32, i as f32);
+			commands.spawn(SpriteBundle {
+				material: materials.ground_tile.clone(),
+				transform: Transform {
+					translation: Vec3::new(i * 32.0, j * 32.0, 0.0),
+                    ..Default::default()
+				},
+				..Default::default()
+			});
+		}
+	}
 }
 
 struct Player;
 
 fn player_movement(
 	kb_input: Res<Input<KeyCode>>,
-	mut players: Query<&mut Transform, With<Player>>,
+	mut q: Query<&mut Transform, Or<(With<Player>, With<Camera>)>>,
 ) {
-	for mut player_transform in players.iter_mut() {
+	for mut transform in q.iter_mut() {
 		if kb_input.pressed(KeyCode::W) {
-			player_transform.translation.y += 2.0;
+			transform.translation.y += 2.0;
 		}
 		if kb_input.pressed(KeyCode::A) {
-			player_transform.translation.x -= 2.0;
+			transform.translation.x -= 2.0;
 		}
 		if kb_input.pressed(KeyCode::S) {
-			player_transform.translation.y -= 2.0;
+			transform.translation.y -= 2.0;
 		}
 		if kb_input.pressed(KeyCode::D) {
-			player_transform.translation.x += 2.0;
+			transform.translation.x += 2.0;
+		}
+	}
+}
+
+#[derive(Default)]
+struct InputState {
+	pub reader_scroll: EventReader<MouseWheel>,
+}
+
+fn camera_input(
+				mut input: ResMut<InputState>,
+				scroll_events: Res<Events<MouseWheel>>,
+				mut q: Query<&mut Transform, With<bevy::render::camera::Camera>>) {
+	for scroll_event in input.reader_scroll.iter(&scroll_events) {
+		for mut camera_transform in q.iter_mut() {
+			camera_transform.scale.y += scroll_event.y * 0.05;
+			camera_transform.scale.x += scroll_event.y * 0.05;
+		}
+	}
+}
+
+struct Level {
+	size: Vec2,
+}
+
+impl Level {
+	fn hub() -> Self {
+		Level {
+			size: (10.0, 10.0).into()
 		}
 	}
 }

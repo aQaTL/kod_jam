@@ -13,4 +13,9 @@ codegen-units = 1
 panic = "abort"
 
 [dependencies]
+bevy = "0.4"
+bevy_tilemap = "0.2"
+
+[patch.crates-io]
 bevy = { git = "https://github.com/bevyengine/bevy.git", rev = "c32c78fc66be2a4a907784b2dcc552e7f9985f52" }
+bevy_tilemap = { git = "https://github.com/joshuajbouw/bevy_tilemap.git", rev = "b0a5b0b918d42a6404171d3732fb6afddbaf7642" }
