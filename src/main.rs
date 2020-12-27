@@ -4,19 +4,24 @@ static GAME_NAME: &str = "TODO: Wymyśl jakąś nazwę";
 
 #[bevy_main]
 fn main() {
+	let window_descriptor = WindowDescriptor {
+		width: 100.0,
+		height: 100.0,
+		title: GAME_NAME.to_string(),
+		vsync: false,
+		resizable: true,
+		decorations: true,
+		cursor_visible: true,
+		cursor_locked: false,
+		mode: bevy::window::WindowMode::Windowed,
+	};
+
 	App::build()
+		.add_resource(window_descriptor)
 		.add_plugins(DefaultPlugins)
 		.add_plugin(GamePlugin)
-		.add_startup_system(setup_window.system())
 		.add_resource(State::new(GameState::Game))
 		.run();
-}
-
-fn setup_window(mut windows: ResMut<Windows>) {
-	windows
-		.get_primary_mut()
-		.expect("Expected to have a window")
-		.set_title(GAME_NAME.to_string());
 }
 
 #[derive(Clone, Copy)]
