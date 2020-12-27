@@ -54,6 +54,12 @@ impl Plugin for GamePlugin {
 			.on_state_enter(Self::STAGE, AppState::Game, spawn_entities.system())
 			.on_state_update(Self::STAGE, AppState::Game, player_movement.system())
 			.on_state_update(Self::STAGE, AppState::Game, camera_input.system())
+			.on_state_update(Self::STAGE, AppState::Game, color_change_input.system())
+			.on_state_update(
+				Self::STAGE,
+				AppState::Game,
+				detect_portal_collision.system(),
+			)
 			.on_state_enter(Self::STAGE, AppState::Menu, menu::setup_menu.system())
 			.on_state_exit(Self::STAGE, AppState::Menu, menu::destroy_menu.system());
 	}
@@ -62,6 +68,7 @@ impl Plugin for GamePlugin {
 struct Textures {
 	player_texture: Handle<ColorMaterial>,
 	ground_tile: Handle<ColorMaterial>,
+	portal_texture: Handle<ColorMaterial>,
 }
 
 fn setup_game(
@@ -75,6 +82,9 @@ fn setup_game(
 	let ground_tile: Handle<Texture> = asset_server.load("ground.png");
 	let ground_tile: Handle<_> = materials.add(ground_tile.into());
 
+	let portal_texture: Handle<Texture> = asset_server.load("portal.png");
+	let portal_texture: Handle<_> = materials.add(portal_texture.into());
+
 	commands
 		.spawn(Camera2dBundle {
 			transform: Transform {
@@ -86,6 +96,7 @@ fn setup_game(
 		.insert_resource(Textures {
 			player_texture,
 			ground_tile,
+			portal_texture,
 		});
 }
 
@@ -102,6 +113,7 @@ fn spawn_entities(commands: &mut Commands, materials: Res<Textures>, level: Res<
 		})
 		.with(Player);
 
+	//TODO use bevy_tilemap
 	for j in
 		((level.size.y / TILE_SIZE / 2.0 * -1.0) as i32)..((level.size.y / TILE_SIZE / 2.0) as i32)
 	{
@@ -118,6 +130,11 @@ fn spawn_entities(commands: &mut Commands, materials: Res<Textures>, level: Res<
 				..Default::default()
 			});
 		}
+	}
+
+	match level.l_type {
+		LevelType::Hub => setup_level_hub(commands, materials),
+		_ => unimplemented!(),
 	}
 }
 
@@ -176,8 +193,17 @@ struct Level {
 	l_type: LevelType,
 }
 
+impl Default for Level {
+	fn default() -> Self {
+		Self::hub()
+	}
+}
+
+#[derive(Debug)]
 enum LevelType {
 	Hub,
+	Secret1,
+	Level1,
 }
 
 impl Level {
@@ -185,6 +211,86 @@ impl Level {
 		Level {
 			size: (15.0 * TILE_SIZE, 10.0 * TILE_SIZE).into(),
 			l_type: LevelType::Hub,
+		}
+	}
+}
+
+#[derive(Debug)]
+struct PortalDestination(LevelType);
+
+fn setup_level_hub(commands: &mut Commands, materials: Res<Textures>) {
+	info!("Spawning hub level entities");
+	commands
+		.spawn(SpriteBundle {
+			material: materials.portal_texture.clone(),
+			transform: Transform {
+				translation: Vec3::new(3.0 * TILE_SIZE, 4.0 * TILE_SIZE, 0.0),
+				..Default::default()
+			},
+			global_transform: Default::default(),
+			..Default::default()
+		})
+		.with(PortalDestination(LevelType::Level1))
+		.spawn(SpriteBundle {
+			material: materials.portal_texture.clone(),
+			transform: Transform {
+				translation: Vec3::new(-7.0 * TILE_SIZE, -5.0 * TILE_SIZE, 0.0),
+				..Default::default()
+			},
+			global_transform: Default::default(),
+			..Default::default()
+		})
+		.with(PortalDestination(LevelType::Secret1));
+}
+
+// TODO: Brightness should probably be changed differently
+fn color_change_input(kb_input: Res<Input<KeyCode>>, mut materials: ResMut<Assets<ColorMaterial>>) {
+	let delta = Vec4::new(0.01, 0.01, 0.01, 0.0);
+	if kb_input.pressed(KeyCode::Period) {
+		let ids = materials.iter().map(|(id, _)| id).collect::<Vec<_>>();
+		for id in ids {
+			let material = materials.get_mut(id).unwrap();
+			material.color = material.color + delta;
+		}
+	}
+	if kb_input.pressed(KeyCode::Comma) {
+		let ids = materials.iter().map(|(id, _)| id).collect::<Vec<_>>();
+		for id in ids {
+			let material = materials.get_mut(id).unwrap();
+			material.color = material.color + delta * -1.0;
+		}
+	}
+}
+
+fn detect_portal_collision(
+	portals: Query<(&Transform, &PortalDestination), With<PortalDestination>>,
+	players: Query<&Transform, (With<Player>, Changed<Transform>)>,
+) {
+	for player in players.iter() {
+		println!();
+		let (a_x1, a_y1) = (
+			player.translation.x - TILE_SIZE / 2.0,
+			player.translation.y - TILE_SIZE / 2.0,
+		);
+		let (a_x2, a_y2) = (
+			player.translation.x + TILE_SIZE / 2.0,
+			player.translation.y + TILE_SIZE / 2.0,
+		);
+		for (portal, portal_destination) in portals.iter() {
+			let (b_x1, b_y1) = (
+				portal.translation.x - TILE_SIZE / 2.0,
+				portal.translation.y - TILE_SIZE / 2.0,
+			);
+			let (b_x2, b_y2) = (
+				portal.translation.x + TILE_SIZE / 2.0,
+				portal.translation.y + TILE_SIZE / 2.0,
+			);
+			println!("player: {},{} x {},{}", a_x1, a_y1, a_x2, a_y2);
+			println!("portal: {},{} x {},{}", b_x1, b_y1, b_x2, b_y2);
+			// TODO: detect intersection
+			if false {
+				println!("player entered portal to {:?}", portal_destination);
+			}
 		}
 	}
 }
