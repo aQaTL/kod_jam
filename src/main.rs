@@ -6,6 +6,7 @@ mod console;
 mod menu;
 
 static GAME_NAME: &str = "TODO: Wymyśl jakąś nazwę";
+const TILE_SIZE: f32 = 32.0;
 
 #[bevy_main]
 fn main() {
@@ -54,8 +55,7 @@ impl Plugin for GamePlugin {
 			.on_state_update(Self::STAGE, AppState::Game, player_movement.system())
 			.on_state_update(Self::STAGE, AppState::Game, camera_input.system())
 			.on_state_enter(Self::STAGE, AppState::Menu, menu::setup_menu.system())
-			.on_state_exit(Self::STAGE, AppState::Menu, menu::destroy_menu.system())
-			.add_system(save_scene.system());
+			.on_state_exit(Self::STAGE, AppState::Menu, menu::destroy_menu.system());
 	}
 }
 
@@ -102,8 +102,12 @@ fn spawn_entities(commands: &mut Commands, materials: Res<Textures>, level: Res<
 		})
 		.with(Player);
 
-	for j in (level.size.y as i32 / 2 * -1)..(level.size.y as i32 / 2) {
-		for i in (level.size.x as i32 / 2 * -1)..(level.size.x as i32 / 2) {
+	for j in
+		((level.size.y / TILE_SIZE / 2.0 * -1.0) as i32)..((level.size.y / TILE_SIZE / 2.0) as i32)
+	{
+		for i in ((level.size.x / TILE_SIZE / 2.0 * -1.0) as i32)
+			..((level.size.x / TILE_SIZE / 2.0) as i32)
+		{
 			let (j, i) = (j as f32, i as f32);
 			commands.spawn(SpriteBundle {
 				material: materials.ground_tile.clone(),
@@ -121,20 +125,24 @@ struct Player;
 
 fn player_movement(
 	kb_input: Res<Input<KeyCode>>,
+	level: Res<Level>,
 	mut q: Query<&mut Transform, Or<(With<Player>, With<Camera>)>>,
 ) {
 	for mut transform in q.iter_mut() {
 		if kb_input.pressed(KeyCode::W) {
-			transform.translation.y += 2.0;
+			transform.translation.y =
+				(transform.translation.y + 2.0).min(level.size.y / 2.0 - TILE_SIZE);
 		}
 		if kb_input.pressed(KeyCode::A) {
-			transform.translation.x -= 2.0;
+			transform.translation.x =
+				(transform.translation.x - 2.0).max(level.size.x / -2.0 + TILE_SIZE / 2.0);
 		}
 		if kb_input.pressed(KeyCode::S) {
-			transform.translation.y -= 2.0;
+			transform.translation.y = (transform.translation.y - 2.0).max(level.size.y / -2.0);
 		}
 		if kb_input.pressed(KeyCode::D) {
-			transform.translation.x += 2.0;
+			transform.translation.x =
+				(transform.translation.x + 2.0).min(level.size.x / 2.0 - TILE_SIZE);
 		}
 	}
 }
@@ -165,25 +173,18 @@ fn camera_input(
 
 struct Level {
 	size: Vec2,
+	l_type: LevelType,
+}
+
+enum LevelType {
+	Hub,
 }
 
 impl Level {
 	fn hub() -> Self {
 		Level {
-			size: (15.0, 10.0).into(),
+			size: (15.0 * TILE_SIZE, 10.0 * TILE_SIZE).into(),
+			l_type: LevelType::Hub,
 		}
 	}
-}
-
-fn save_scene(world: &mut World, resources: &mut Resources) {
-	// use bevy::reflect::TypeRegistry;
-	//
-	// // The TypeRegistry resource contains information about all registered types (including components). This is used to construct scenes.
-	// let type_registry = resources.get::<TypeRegistry>().unwrap();
-	// let scene = DynamicScene::from_world(&world, &type_registry);
-	//
-	// // Scenes can be serialized like this:
-	// println!("{}", scene.serialize_ron(&type_registry).unwrap());
-	//
-	// // TODO: save scene
 }
