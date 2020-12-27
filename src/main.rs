@@ -1,7 +1,8 @@
-use bevy::prelude::*;
 use bevy::input::mouse::MouseWheel;
+use bevy::prelude::*;
 use bevy::render::camera::Camera;
 
+mod console;
 mod menu;
 
 static GAME_NAME: &str = "TODO: Wymyśl jakąś nazwę";
@@ -22,6 +23,7 @@ fn main() {
 		})
 		.add_plugins(DefaultPlugins)
 		.add_plugin(GamePlugin)
+		.add_plugin(console::ConsolePlugin)
 		.run();
 }
 
@@ -52,7 +54,8 @@ impl Plugin for GamePlugin {
 			.on_state_update(Self::STAGE, AppState::Game, player_movement.system())
 			.on_state_update(Self::STAGE, AppState::Game, camera_input.system())
 			.on_state_enter(Self::STAGE, AppState::Menu, menu::setup_menu.system())
-			.on_state_exit(Self::STAGE, AppState::Menu, menu::destroy_menu.system());
+			.on_state_exit(Self::STAGE, AppState::Menu, menu::destroy_menu.system())
+			.add_system(save_scene.system());
 	}
 }
 
@@ -99,14 +102,14 @@ fn spawn_entities(commands: &mut Commands, materials: Res<Textures>, level: Res<
 		})
 		.with(Player);
 
-	for j in 0..(level.size.y as u32) {
-		for i in 0..(level.size.x as u32) {
+	for j in (level.size.y as i32 / 2 * -1)..(level.size.y as i32 / 2) {
+		for i in (level.size.x as i32 / 2 * -1)..(level.size.x as i32 / 2) {
 			let (j, i) = (j as f32, i as f32);
 			commands.spawn(SpriteBundle {
 				material: materials.ground_tile.clone(),
 				transform: Transform {
 					translation: Vec3::new(i * 32.0, j * 32.0, 0.0),
-                    ..Default::default()
+					..Default::default()
 				},
 				..Default::default()
 			});
@@ -142,9 +145,16 @@ struct InputState {
 }
 
 fn camera_input(
-				mut input: ResMut<InputState>,
-				scroll_events: Res<Events<MouseWheel>>,
-				mut q: Query<&mut Transform, With<bevy::render::camera::Camera>>) {
+	mut input: ResMut<InputState>,
+	scroll_events: Res<Events<MouseWheel>>,
+	mut q: Query<
+		&mut Transform,
+		(
+			With<bevy::render::camera::Camera>,
+			Without<console::ConsoleComponent>,
+		),
+	>,
+) {
 	for scroll_event in input.reader_scroll.iter(&scroll_events) {
 		for mut camera_transform in q.iter_mut() {
 			camera_transform.scale.y += scroll_event.y * 0.05;
@@ -160,7 +170,20 @@ struct Level {
 impl Level {
 	fn hub() -> Self {
 		Level {
-			size: (10.0, 10.0).into()
+			size: (15.0, 10.0).into(),
 		}
 	}
+}
+
+fn save_scene(world: &mut World, resources: &mut Resources) {
+	// use bevy::reflect::TypeRegistry;
+	//
+	// // The TypeRegistry resource contains information about all registered types (including components). This is used to construct scenes.
+	// let type_registry = resources.get::<TypeRegistry>().unwrap();
+	// let scene = DynamicScene::from_world(&world, &type_registry);
+	//
+	// // Scenes can be serialized like this:
+	// println!("{}", scene.serialize_ron(&type_registry).unwrap());
+	//
+	// // TODO: save scene
 }
