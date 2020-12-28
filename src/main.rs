@@ -160,7 +160,13 @@ struct Player;
 fn player_movement(
 	kb_input: Res<Input<KeyCode>>,
 	level: Res<Level>,
-	mut q: Query<&mut Transform, Or<(With<Player>, With<Camera>)>>,
+	mut q: Query<
+		&mut Transform,
+		(
+			Or<(With<Player>, With<Camera>)>,
+			Without<console::ConsoleComponent>,
+		),
+	>,
 ) {
 	for mut transform in q.iter_mut() {
 		if kb_input.pressed(KeyCode::W) {
