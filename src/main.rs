@@ -371,8 +371,11 @@ struct CollisionEventReader(EventReader<CollisionEvent>);
 fn process_collision_events(
 	mut collision_event_reader: ResMut<CollisionEventReader>,
 	collision_events: Res<Events<CollisionEvent>>,
+	mut console_events: ResMut<Events<console::ConsoleEvent>>,
 ) {
 	for collision_event in collision_event_reader.0.iter(&collision_events) {
-		println!("Collision detected with: {:?}", collision_event);
+		let log_msg = format!("Collision detected with: {:?}", collision_event);
+		println!("{}", log_msg);
+		console_events.send(console::ConsoleEvent::Log(log_msg))
 	}
 }
