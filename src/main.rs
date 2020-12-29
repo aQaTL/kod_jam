@@ -23,13 +23,14 @@ fn main() {
 			mode: bevy::window::WindowMode::Windowed,
 		})
 		.add_plugins(DefaultPlugins)
+		.init_resource::<menu::ButtonMaterials>()
 		.add_plugin(GamePlugin)
 		.add_plugin(console::ConsolePlugin)
 		.run();
 }
 
 #[derive(Clone, Copy)]
-enum AppState {
+pub enum AppState {
 	Game,
 	Menu,
 }
@@ -43,7 +44,7 @@ impl GamePlugin {
 impl Plugin for GamePlugin {
 	fn build(&self, app: &mut AppBuilder) {
 		app.add_startup_system(setup_game.system())
-			.add_resource(State::new(AppState::Game))
+			.add_resource(State::new(AppState::Menu))
 			.add_resource(Level::hub())
 			.add_resource(InputState::default())
 			.add_resource(CollisionEventReader::default())
@@ -73,7 +74,8 @@ impl Plugin for GamePlugin {
 				process_collision_events.system(),
 			)
 			.on_state_enter(Self::STAGE, AppState::Menu, menu::setup_menu.system())
-			.on_state_exit(Self::STAGE, AppState::Menu, menu::destroy_menu.system());
+			.on_state_exit(Self::STAGE, AppState::Menu, menu::destroy_menu.system())
+			.on_state_update(Self::STAGE, AppState::Menu, menu::update_menu.system());
 	}
 }
 
@@ -182,7 +184,7 @@ fn player_movement(
 		}
 		if kb_input.pressed(KeyCode::D) {
 			transform.translation.x =
-				(transform.translation.x + 2.0).min(level.size.x / 2.0 - TILE_SIZE);
+				(transform.translation.x + 2.0).min(level.size.x / 2.0 - TILE_SIZE * 1.5);
 		}
 	}
 }
