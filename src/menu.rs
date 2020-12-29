@@ -25,7 +25,7 @@ pub fn setup_menu(
 		.with_children(|parent| {
 			parent.spawn(TextBundle {
 				text: Text {
-					value: "Button".to_string(),
+					value: "Ready?".to_string(),
 					font: asset_server.load("FiraSans-Bold.ttf"),
 					style: TextStyle {
 						font_size: 40.0,
@@ -65,16 +65,16 @@ pub fn update_menu(
 		let mut text = text_query.get_mut(children[0]).unwrap();
 		match *interaction {
 			Interaction::Clicked => {
-				text.value = "Press".to_string();
+				text.value = "Loading...".to_string();
 				*material = button_materials.pressed.clone();
 				state.set_next(AppState::Game).unwrap();
 			}
 			Interaction::Hovered => {
-				text.value = "Hover".to_string();
+				text.value = "Start!".to_string();
 				*material = button_materials.hovered.clone();
 			}
 			Interaction::None => {
-				text.value = "Button".to_string();
+				text.value = "Ready?".to_string();
 				*material = button_materials.normal.clone();
 			}
 		}
