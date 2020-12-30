@@ -43,8 +43,20 @@ impl GamePlugin {
 
 impl Plugin for GamePlugin {
 	fn build(&self, app: &mut AppBuilder) {
+		let args = std::env::args().collect::<Vec<_>>();
+
 		app.add_startup_system(setup_game.system())
-			.add_resource(State::new(AppState::Menu))
+			.add_resource(State::new({
+				if args
+					.get(1)
+					.map(|arg| arg == "--skip-menu")
+					.unwrap_or_default()
+				{
+					AppState::Game
+				} else {
+					AppState::Menu
+				}
+			}))
 			.add_resource(Level::hub())
 			.add_resource(InputState::default())
 			.add_resource(CollisionEventReader::default())
@@ -72,10 +84,7 @@ impl Plugin for GamePlugin {
 				Self::STAGE,
 				AppState::Game,
 				process_collision_events.system(),
-			); /*
-		 .on_state_enter(Self::STAGE, AppState::Menu, menu::setup_menu.system())
-		 .on_state_exit(Self::STAGE, AppState::Menu, menu::destroy_menu.system())
-		 .on_state_update(Self::STAGE, AppState::Menu, menu::update_menu.system());*/
+			);
 	}
 }
 
@@ -91,7 +100,7 @@ fn setup_game(
 	asset_server: Res<AssetServer>,
 	mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-	let player_texture: Handle<Texture> = asset_server.load("bird.png");
+	let player_texture: Handle<Texture> = asset_server.load("saitama_fit.png");
 	let player_texture: Handle<_> = materials.add(player_texture.into());
 
 	let ground_tile: Handle<Texture> = asset_server.load("ground.png");
@@ -123,11 +132,6 @@ fn spawn_entities(commands: &mut Commands, materials: Res<Textures>, level: Res<
 	commands
 		.spawn(SpriteBundle {
 			material: materials.player_texture.clone(),
-			transform: Transform {
-				translation: Default::default(),
-				rotation: Quat::default(),
-				scale: Vec3::new(0.04, 0.04, 1.0),
-			},
 			..Default::default()
 		})
 		.with(Player);
@@ -306,28 +310,12 @@ fn detect_portal_collision(
 	players: Query<&Transform, (With<Player>, Changed<Transform>)>,
 ) {
 	for player in players.iter() {
-		println!();
-		let (a_x1, a_y1) = (
-			player.translation.x - TILE_SIZE / 2.0,
-			player.translation.y - TILE_SIZE / 2.0,
-		);
-		let (a_x2, a_y2) = (
-			player.translation.x + TILE_SIZE / 2.0,
-			player.translation.y + TILE_SIZE / 2.0,
-		);
 		for (portal, portal_destination) in portals.iter() {
-			let (b_x1, b_y1) = (
-				portal.translation.x - TILE_SIZE / 2.0,
-				portal.translation.y - TILE_SIZE / 2.0,
-			);
-			let (b_x2, b_y2) = (
-				portal.translation.x + TILE_SIZE / 2.0,
-				portal.translation.y + TILE_SIZE / 2.0,
-			);
-			println!("player: {},{} x {},{}", a_x1, a_y1, a_x2, a_y2);
-			println!("portal: {},{} x {},{}", b_x1, b_y1, b_x2, b_y2);
-			// TODO: detect intersection
-			if false {
+			// To increase tolerance, increase this                ---\/
+			if (player.translation.x - portal.translation.x).abs() * 2.1 < (TILE_SIZE + TILE_SIZE)
+				&& (player.translation.y - portal.translation.y).abs() * 2.1
+					< (TILE_SIZE + TILE_SIZE)
+			{
 				println!("player entered portal to {:?}", portal_destination);
 			}
 		}
@@ -335,32 +323,16 @@ fn detect_portal_collision(
 }
 
 fn detect_spikes_collision(
-	portals: Query<(&Transform, &PortalDestination), With<PortalDestination>>,
-	players: Query<&Transform, (With<Player>, Changed<Transform>)>,
+	spikes: Query<(&Transform, &Sprite), With<Spikes>>,
+	players: Query<(&Transform, &Sprite), (With<Player>, Changed<Transform>)>,
 ) {
-	for player in players.iter() {
-		println!();
-		let (a_x1, a_y1) = (
-			player.translation.x - TILE_SIZE / 2.0,
-			player.translation.y - TILE_SIZE / 2.0,
-		);
-		let (a_x2, a_y2) = (
-			player.translation.x + TILE_SIZE / 2.0,
-			player.translation.y + TILE_SIZE / 2.0,
-		);
-		for (portal, portal_destination) in portals.iter() {
-			let (b_x1, b_y1) = (
-				portal.translation.x - TILE_SIZE / 2.0,
-				portal.translation.y - TILE_SIZE / 2.0,
-			);
-			let (b_x2, b_y2) = (
-				portal.translation.x + TILE_SIZE / 2.0,
-				portal.translation.y + TILE_SIZE / 2.0,
-			);
-			println!("player: {},{} x {},{}", a_x1, a_y1, a_x2, a_y2);
-			println!("portal: {},{} x {},{}", b_x1, b_y1, b_x2, b_y2);
-			// TODO: detect intersection
-			if false {
+	for (player, player_sprite) in players.iter() {
+		for (spike, spike_sprite) in spikes.iter() {
+			if (player.translation.x - spike.translation.x).abs() * 2.1
+				< (player_sprite.size.x + spike_sprite.size.x)
+				&& (player.translation.y - spike.translation.y).abs() * 2.1
+					< (player_sprite.size.y + spike_sprite.size.y)
+			{
 				println!("player touched spikes");
 			}
 		}
