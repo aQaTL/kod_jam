@@ -1,6 +1,12 @@
 use crate::AppState;
 use bevy::{prelude::*,app::AppExit };
 
+#[derive(Debug)]
+pub enum MenuButton {
+	Exit,
+	Play,
+}
+
 pub fn setup_menu(
 	commands: &mut Commands,
 	asset_server: Res<AssetServer>,
@@ -34,7 +40,8 @@ pub fn setup_menu(
 					},
 				},
 				..Default::default()
-			});
+			})
+			.with(MenuButton::Play);
 		})
 		.spawn(ButtonBundle {
 			style: Style {
@@ -62,7 +69,8 @@ pub fn setup_menu(
 					},
 				},
 				..Default::default()
-			});
+			})
+			.with(MenuButton::Exit);
 		});
 }
 
@@ -81,12 +89,13 @@ pub fn update_menu(
 		(Entity, &Interaction, &mut Handle<ColorMaterial>, &Children),
 		(Mutated<Interaction>, With<Button>),
 	>,
-	mut text_query: Query<&mut Text>,
+	mut text_query: Query<(&mut Text, &MenuButton)>,
 	mut state: ResMut<State<AppState>>,
 	mut exit_signal: ResMut<Events<AppExit>>
 ) {
 	for (id, interaction, mut material, children) in interaction_query.iter_mut() {
-		let mut text = text_query.get_mut(children[0]).unwrap();
+		let (mut text, menu_button) = text_query.get_mut(children[0]).unwrap();
+		println!("Interaction with: {:?}", menu_button);
 		println!("{:?}", id.id());
 		match id.id() {
 			5 => match *interaction {
