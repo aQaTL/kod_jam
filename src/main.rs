@@ -33,6 +33,7 @@ fn main() {
 pub enum AppState {
 	Game,
 	Menu,
+	GameOver,
 }
 
 struct GamePlugin;
@@ -228,7 +229,7 @@ impl Default for Level {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 enum LevelType {
 	Hub,
 	Secret1,
@@ -244,7 +245,7 @@ impl Level {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 struct PortalDestination(LevelType);
 
 struct Spikes;
@@ -308,6 +309,7 @@ fn color_change_input(kb_input: Res<Input<KeyCode>>, mut materials: ResMut<Asset
 fn detect_portal_collision(
 	portals: Query<(&Transform, &PortalDestination), With<PortalDestination>>,
 	players: Query<&Transform, (With<Player>, Changed<Transform>)>,
+	mut collision_events: ResMut<Events<CollisionEvent>>,
 ) {
 	for player in players.iter() {
 		for (portal, portal_destination) in portals.iter() {
@@ -316,7 +318,7 @@ fn detect_portal_collision(
 				&& (player.translation.y - portal.translation.y).abs() * 2.1
 					< (TILE_SIZE + TILE_SIZE)
 			{
-				println!("player entered portal to {:?}", portal_destination);
+				collision_events.send(CollisionEvent::Portal(*portal_destination));
 			}
 		}
 	}
@@ -325,6 +327,7 @@ fn detect_portal_collision(
 fn detect_spikes_collision(
 	spikes: Query<(&Transform, &Sprite), With<Spikes>>,
 	players: Query<(&Transform, &Sprite), (With<Player>, Changed<Transform>)>,
+	mut collision_events: ResMut<Events<CollisionEvent>>,
 ) {
 	for (player, player_sprite) in players.iter() {
 		for (spike, spike_sprite) in spikes.iter() {
@@ -333,7 +336,8 @@ fn detect_spikes_collision(
 				&& (player.translation.y - spike.translation.y).abs() * 2.1
 					< (player_sprite.size.y + spike_sprite.size.y)
 			{
-				println!("player touched spikes");
+				info!("player touched spikes");
+				collision_events.send(CollisionEvent::Spikes);
 			}
 		}
 	}
@@ -348,14 +352,56 @@ enum CollisionEvent {
 #[derive(Default)]
 struct CollisionEventReader(EventReader<CollisionEvent>);
 
+const BRIGHTNESS_DELTA: f32 = 0.04;
+
 fn process_collision_events(
 	mut collision_event_reader: ResMut<CollisionEventReader>,
 	collision_events: Res<Events<CollisionEvent>>,
 	mut console_events: ResMut<Events<console::ConsoleEvent>>,
+	mut materials: ResMut<Assets<ColorMaterial>>,
+	mut player_transform_query: Query<&mut Transform, Or<(With<Player>, With<Camera>)>>,
+	mut state: ResMut<State<AppState>>,
 ) {
 	for collision_event in collision_event_reader.0.iter(&collision_events) {
+		match collision_event {
+			CollisionEvent::Spikes => {
+				change_brightness(&mut materials, &mut state);
+				reset_player_position(&mut player_transform_query);
+			}
+			CollisionEvent::Portal(destination) => {
+				info!("player entered portal to {:?}", destination);
+			}
+		}
 		let log_msg = format!("Collision detected with: {:?}", collision_event);
 		println!("{}", log_msg);
 		console_events.send(console::ConsoleEvent::Log(log_msg))
+	}
+}
+
+fn change_brightness(materials: &mut Assets<ColorMaterial>, mut state: &mut State<AppState>) {
+	let delta = Vec4::new(BRIGHTNESS_DELTA, BRIGHTNESS_DELTA, BRIGHTNESS_DELTA, 0.0);
+
+	let ids = materials.iter().map(|(id, _)| id).collect::<Vec<_>>();
+
+	let mut all_black = true;
+	for id in ids {
+		let material = materials.get_mut(id).unwrap();
+		material.color = material.color + delta * -1.0;
+		if material.color.r() > 0.0 && material.color.g() > 0.0 && material.color.b() > 0.0 {
+			all_black = false;
+		}
+	}
+
+	if all_black {
+		state.set_next(AppState::GameOver).unwrap();
+	}
+}
+
+fn reset_player_position(
+	mut player_transform_query: &mut Query<&mut Transform, Or<(With<Player>, With<Camera>)>>,
+) {
+	for mut transform in player_transform_query.iter_mut() {
+		transform.translation.x = 0.0;
+		transform.translation.y = 0.0;
 	}
 }
