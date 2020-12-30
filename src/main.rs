@@ -391,11 +391,10 @@ fn change_brightness(
 ) {
 	let delta = Vec4::new(BRIGHTNESS_DELTA, BRIGHTNESS_DELTA, BRIGHTNESS_DELTA, 0.0);
 
-	let console_entity_ids = console_entities.iter().collect::<Vec<_>>();
 	let ids = materials
 		.iter()
 		.map(|(id, _)| id)
-		.filter(|id| !console_entity_ids.iter().any(|con_id| con_id.id == *id))
+		.filter(|id| !console_entities.iter().any(|con_id| con_id.id == *id))
 		.collect::<Vec<_>>();
 
 	let mut all_black = true;
