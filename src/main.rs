@@ -23,9 +23,9 @@ fn main() {
 			mode: bevy::window::WindowMode::Windowed,
 		})
 		.add_plugins(DefaultPlugins)
-		.init_resource::<menu::ButtonMaterials>()
 		.add_plugin(GamePlugin)
 		.add_plugin(console::ConsolePlugin)
+		.add_plugin(menu::MenuPlugin)
 		.run();
 }
 
@@ -72,10 +72,10 @@ impl Plugin for GamePlugin {
 				Self::STAGE,
 				AppState::Game,
 				process_collision_events.system(),
-			)
-			.on_state_enter(Self::STAGE, AppState::Menu, menu::setup_menu.system())
-			.on_state_exit(Self::STAGE, AppState::Menu, menu::destroy_menu.system())
-			.on_state_update(Self::STAGE, AppState::Menu, menu::update_menu.system());
+			); /*
+		 .on_state_enter(Self::STAGE, AppState::Menu, menu::setup_menu.system())
+		 .on_state_exit(Self::STAGE, AppState::Menu, menu::destroy_menu.system())
+		 .on_state_update(Self::STAGE, AppState::Menu, menu::update_menu.system());*/
 	}
 }
 
