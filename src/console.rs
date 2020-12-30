@@ -109,7 +109,12 @@ fn process_console_events(
 ) {
 	for console_event in console_event_reader.0.iter(&console_events) {
 		match console_event {
-			ConsoleEvent::Log(log) => q.iter_mut().for_each(|mut buffer| buffer.0.push_str(&log)),
+			ConsoleEvent::Log(log) => q.iter_mut().for_each(|mut buffer| {
+				if buffer.0.lines().count() >= 10 {
+					buffer.0.clear();
+				}
+				buffer.0.push_str(&log)
+			}),
 		}
 	}
 }

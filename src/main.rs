@@ -1,3 +1,4 @@
+use crate::console::ConsoleComponent;
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 use bevy::render::camera::Camera;
@@ -164,7 +165,10 @@ fn spawn_entities(commands: &mut Commands, materials: Res<Textures>, level: Res<
 
 struct Player;
 
+const MOVEMENT_DELTA: f32 = 100.0;
+
 fn player_movement(
+	time: Res<Time>,
 	kb_input: Res<Input<KeyCode>>,
 	level: Res<Level>,
 	mut q: Query<
@@ -175,21 +179,22 @@ fn player_movement(
 		),
 	>,
 ) {
+	let delta = MOVEMENT_DELTA * time.delta_seconds();
 	for mut transform in q.iter_mut() {
 		if kb_input.pressed(KeyCode::W) {
 			transform.translation.y =
-				(transform.translation.y + 2.0).min(level.size.y / 2.0 - TILE_SIZE);
+				(transform.translation.y + delta).min(level.size.y / 2.0 - TILE_SIZE);
 		}
 		if kb_input.pressed(KeyCode::A) {
 			transform.translation.x =
-				(transform.translation.x - 2.0).max(level.size.x / -2.0 + TILE_SIZE / 2.0);
+				(transform.translation.x - delta).max(level.size.x / -2.0 + TILE_SIZE / 2.0);
 		}
 		if kb_input.pressed(KeyCode::S) {
-			transform.translation.y = (transform.translation.y - 2.0).max(level.size.y / -2.0);
+			transform.translation.y = (transform.translation.y - delta).max(level.size.y / -2.0);
 		}
 		if kb_input.pressed(KeyCode::D) {
 			transform.translation.x =
-				(transform.translation.x + 2.0).min(level.size.x / 2.0 - TILE_SIZE * 1.5);
+				(transform.translation.x + delta).min(level.size.x / 2.0 - TILE_SIZE * 1.5);
 		}
 	}
 }
@@ -361,27 +366,37 @@ fn process_collision_events(
 	mut materials: ResMut<Assets<ColorMaterial>>,
 	mut player_transform_query: Query<&mut Transform, Or<(With<Player>, With<Camera>)>>,
 	mut state: ResMut<State<AppState>>,
+	console_entities: Query<&Handle<ColorMaterial>, With<ConsoleComponent>>,
 ) {
 	for collision_event in collision_event_reader.0.iter(&collision_events) {
+		println!("collision event start");
 		match collision_event {
 			CollisionEvent::Spikes => {
-				change_brightness(&mut materials, &mut state);
+				change_brightness(&mut materials, &console_entities, &mut state);
 				reset_player_position(&mut player_transform_query);
 			}
 			CollisionEvent::Portal(destination) => {
 				info!("player entered portal to {:?}", destination);
 			}
 		}
-		let log_msg = format!("Collision detected with: {:?}", collision_event);
-		println!("{}", log_msg);
+		let log_msg = format!("Collision detected with: {:?}\n", collision_event);
 		console_events.send(console::ConsoleEvent::Log(log_msg))
 	}
 }
 
-fn change_brightness(materials: &mut Assets<ColorMaterial>, mut state: &mut State<AppState>) {
+fn change_brightness(
+	materials: &mut Assets<ColorMaterial>,
+	console_entities: &Query<&Handle<ColorMaterial>, With<ConsoleComponent>>,
+	state: &mut State<AppState>,
+) {
 	let delta = Vec4::new(BRIGHTNESS_DELTA, BRIGHTNESS_DELTA, BRIGHTNESS_DELTA, 0.0);
 
-	let ids = materials.iter().map(|(id, _)| id).collect::<Vec<_>>();
+	let console_entity_ids = console_entities.iter().collect::<Vec<_>>();
+	let ids = materials
+		.iter()
+		.map(|(id, _)| id)
+		.filter(|id| !console_entity_ids.iter().any(|con_id| con_id.id == *id))
+		.collect::<Vec<_>>();
 
 	let mut all_black = true;
 	for id in ids {
@@ -398,7 +413,7 @@ fn change_brightness(materials: &mut Assets<ColorMaterial>, mut state: &mut Stat
 }
 
 fn reset_player_position(
-	mut player_transform_query: &mut Query<&mut Transform, Or<(With<Player>, With<Camera>)>>,
+	player_transform_query: &mut Query<&mut Transform, Or<(With<Player>, With<Camera>)>>,
 ) {
 	for mut transform in player_transform_query.iter_mut() {
 		transform.translation.x = 0.0;
