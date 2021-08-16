@@ -1,7 +1,9 @@
 use crate::console::ConsoleComponent;
-use bevy::input::mouse::MouseWheel;
+use bevy::app::Events;
+use bevy::input::mouse::{MouseMotion, MouseWheel};
 use bevy::prelude::*;
 use bevy::render::camera::Camera;
+use bevy::window::WindowResizeConstraints;
 
 mod console;
 mod menu;
@@ -12,9 +14,16 @@ const TILE_SIZE: f32 = 32.0;
 #[bevy_main]
 fn main() {
 	App::build()
-		.add_resource(WindowDescriptor {
+		.insert_resource(WindowDescriptor {
 			width: 1280.0,
 			height: 720.0,
+			resize_constraints: WindowResizeConstraints {
+				min_width: 1280.0 / 4.0,
+				min_height: 720.0 / 4.0,
+				max_width: f32::INFINITY,
+				max_height: f32::INFINITY,
+			},
+			scale_factor_override: None,
 			title: GAME_NAME.to_string(),
 			vsync: false,
 			resizable: true,
@@ -30,62 +39,63 @@ fn main() {
 		.run();
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Hash)]
 pub enum AppState {
 	Game,
 	Menu,
 	GameOver,
 }
 
+impl Default for AppState {
+	fn default() -> Self {
+		if std::env::args().any(|arg| arg == "--skip-menu") {
+			AppState::Game
+		} else {
+			AppState::Menu
+		}
+	}
+}
+
 struct GamePlugin;
 
-impl GamePlugin {
-	const STAGE: &'static str = "game_stage";
-}
+// impl GamePlugin {
+// const STAGE: &'static str = "game_stage";
+// }
+
+// #[derive(Clone, Hash, StageLabel)]
+// enum GameStage {
+// 	GameStage
+// }
 
 impl Plugin for GamePlugin {
 	fn build(&self, app: &mut AppBuilder) {
-		let args = std::env::args().collect::<Vec<_>>();
-
 		app.add_startup_system(setup_game.system())
-			.add_resource(State::new({
-				if args
-					.get(1)
-					.map(|arg| arg == "--skip-menu")
-					.unwrap_or_default()
-				{
-					AppState::Game
-				} else {
-					AppState::Menu
-				}
-			}))
-			.add_resource(Level::hub())
-			.add_resource(InputState::default())
-			.add_resource(CollisionEventReader::default())
+			.insert_resource(Level::hub())
 			.add_event::<CollisionEvent>()
-			.add_stage_after(
-				stage::UPDATE,
-				Self::STAGE,
-				StateStage::<AppState>::default(),
+			// .add_stage_after(CoreStage::Update, Self::STAGE, AppState::default())
+			.add_state(AppState::default())
+			.add_system_set(
+				SystemSet::on_enter(AppState::Game).with_system(spawn_entities.system()),
 			)
-			.on_state_enter(Self::STAGE, AppState::Game, spawn_entities.system())
-			.on_state_update(Self::STAGE, AppState::Game, player_movement.system())
-			.on_state_update(Self::STAGE, AppState::Game, camera_input.system())
-			.on_state_update(Self::STAGE, AppState::Game, color_change_input.system())
-			.on_state_update(
-				Self::STAGE,
-				AppState::Game,
-				detect_portal_collision.system(),
+			.add_system_set(SystemSet::on_update(AppState::Game).with_system(player_input.system()))
+			.add_system_set(
+				SystemSet::on_update(AppState::Game).with_system(player_shooting.system()),
 			)
-			.on_state_update(
-				Self::STAGE,
-				AppState::Game,
-				detect_spikes_collision.system(),
+			.add_system_set(
+				SystemSet::on_update(AppState::Game).with_system(camera_follow.system()),
 			)
-			.on_state_update(
-				Self::STAGE,
-				AppState::Game,
-				process_collision_events.system(),
+			.add_system_set(SystemSet::on_update(AppState::Game).with_system(camera_input.system()))
+			.add_system_set(
+				SystemSet::on_update(AppState::Game).with_system(color_change_input.system()),
+			)
+			.add_system_set(
+				SystemSet::on_update(AppState::Game).with_system(detect_portal_collision.system()),
+			)
+			.add_system_set(
+				SystemSet::on_update(AppState::Game).with_system(detect_spikes_collision.system()),
+			)
+			.add_system_set(
+				SystemSet::on_update(AppState::Game).with_system(process_collision_events.system()),
 			);
 	}
 }
@@ -95,10 +105,11 @@ struct Textures {
 	ground_tile: Handle<ColorMaterial>,
 	portal_texture: Handle<ColorMaterial>,
 	spikes_texture: Handle<ColorMaterial>,
+	missile_texture: Handle<ColorMaterial>,
 }
 
 fn setup_game(
-	commands: &mut Commands,
+	mut commands: Commands,
 	asset_server: Res<AssetServer>,
 	mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
@@ -114,29 +125,33 @@ fn setup_game(
 	let spikes_texture: Handle<Texture> = asset_server.load("spikes.png");
 	let spikes_texture: Handle<_> = materials.add(spikes_texture.into());
 
-	commands
-		.spawn(Camera2dBundle {
-			transform: Transform {
-				scale: Vec3::new(0.3, 0.3, 1.0),
-				..Default::default()
-			},
+	let missile_texture: Handle<Texture> = asset_server
+		.load("LowPoly_Missile_command_Game_Assets_DevilsGarage_v01/2D/missile_large.png");
+	let missile_texture: Handle<_> = materials.add(missile_texture.into());
+
+	commands.spawn_bundle(OrthographicCameraBundle {
+		transform: Transform {
+			scale: Vec3::new(0.3, 0.3, 1.0),
 			..Default::default()
-		})
-		.insert_resource(Textures {
-			player_texture,
-			ground_tile,
-			portal_texture,
-			spikes_texture,
-		});
+		},
+		..OrthographicCameraBundle::new_2d()
+	});
+	commands.insert_resource(Textures {
+		player_texture,
+		ground_tile,
+		portal_texture,
+		spikes_texture,
+		missile_texture,
+	});
 }
 
-fn spawn_entities(commands: &mut Commands, materials: Res<Textures>, level: Res<Level>) {
+fn spawn_entities(mut commands: Commands, materials: Res<Textures>, level: Res<Level>) {
 	commands
-		.spawn(SpriteBundle {
+		.spawn_bundle(SpriteBundle {
 			material: materials.player_texture.clone(),
 			..Default::default()
 		})
-		.with(Player);
+		.insert(Player);
 
 	//TODO use bevy_tilemap
 	for j in
@@ -146,7 +161,7 @@ fn spawn_entities(commands: &mut Commands, materials: Res<Textures>, level: Res<
 			..((level.size.x / TILE_SIZE / 2.0) as i32)
 		{
 			let (j, i) = (j as f32, i as f32);
-			commands.spawn(SpriteBundle {
+			commands.spawn_bundle(SpriteBundle {
 				material: materials.ground_tile.clone(),
 				transform: Transform {
 					translation: Vec3::new(i * 32.0, j * 32.0, 0.0),
@@ -167,20 +182,14 @@ struct Player;
 
 const MOVEMENT_DELTA: f32 = 100.0;
 
-fn player_movement(
+fn player_input(
 	time: Res<Time>,
 	kb_input: Res<Input<KeyCode>>,
 	level: Res<Level>,
-	mut q: Query<
-		&mut Transform,
-		(
-			Or<(With<Player>, With<Camera>)>,
-			Without<console::ConsoleComponent>,
-		),
-	>,
+	mut q: Query<(&mut Transform, &Player), (Without<console::ConsoleComponent>,)>,
 ) {
 	let delta = MOVEMENT_DELTA * time.delta_seconds();
-	for mut transform in q.iter_mut() {
+	for (mut transform, _) in q.iter_mut() {
 		if kb_input.pressed(KeyCode::W) {
 			transform.translation.y =
 				(transform.translation.y + delta).min(level.size.y / 2.0 - TILE_SIZE);
@@ -199,14 +208,56 @@ fn player_movement(
 	}
 }
 
-#[derive(Default)]
-struct InputState {
-	pub reader_scroll: EventReader<MouseWheel>,
+fn player_shooting(
+	// commands: &mut Commands,
+	// materials: Res<Textures>,
+	mut console_events: EventWriter<console::ConsoleEvent>,
+	// mut input: ResMut<InputState>,
+	kb_input: Res<Input<KeyCode>>,
+	mouse_input: Res<Input<MouseButton>>,
+	mut mouse_motion: EventReader<MouseMotion>,
+) {
+	if mouse_input.just_pressed(MouseButton::Left) || kb_input.just_pressed(KeyCode::Space) {
+		console_events.send(console::ConsoleEvent::from("fire\n"));
+		// commands.spawn(SpriteBundle {
+		// 	material: materials.missile_texture.clone(),
+		// 	transform: Transform {
+		// 		..Default::default()
+		// 	},
+		// 	..Default::default()
+		// });
+	}
+	for event in mouse_motion.iter() {
+		let msg = format!("{:?}\n", event.delta);
+		console_events.send(msg.into());
+	}
+}
+
+pub struct Missile {
+	direction: Vec3,
+	rotation: Vec3,
+}
+
+fn camera_follow(
+	mut q: QuerySet<(
+		Query<&Transform, (With<Player>, Changed<Transform>)>,
+		Query<&mut Transform, (With<Camera>, Without<console::ConsoleComponent>)>,
+	)>,
+) {
+	if let Some(player_transform) = q.q0().iter().next() {
+		let (x, y) = (
+			player_transform.translation.x,
+			player_transform.translation.y,
+		);
+		for mut camera_transform in q.q1_mut().iter_mut() {
+			camera_transform.translation.x = x;
+			camera_transform.translation.y = y;
+		}
+	}
 }
 
 fn camera_input(
-	mut input: ResMut<InputState>,
-	scroll_events: Res<Events<MouseWheel>>,
+	mut scroll_events: EventReader<MouseWheel>,
 	mut q: Query<
 		&mut Transform,
 		(
@@ -215,7 +266,7 @@ fn camera_input(
 		),
 	>,
 ) {
-	for scroll_event in input.reader_scroll.iter(&scroll_events) {
+	for scroll_event in scroll_events.iter() {
 		for mut camera_transform in q.iter_mut() {
 			camera_transform.scale.y += scroll_event.y * 0.05;
 			camera_transform.scale.x += scroll_event.y * 0.05;
@@ -255,10 +306,10 @@ struct PortalDestination(LevelType);
 
 struct Spikes;
 
-fn setup_level_hub(commands: &mut Commands, materials: Res<Textures>) {
+fn setup_level_hub(mut commands: Commands, materials: Res<Textures>) {
 	info!("Spawning hub level entities");
 	commands
-		.spawn(SpriteBundle {
+		.spawn_bundle(SpriteBundle {
 			material: materials.portal_texture.clone(),
 			transform: Transform {
 				translation: Vec3::new(3.0 * TILE_SIZE, 4.0 * TILE_SIZE, 0.0),
@@ -266,8 +317,9 @@ fn setup_level_hub(commands: &mut Commands, materials: Res<Textures>) {
 			},
 			..Default::default()
 		})
-		.with(PortalDestination(LevelType::Level1))
-		.spawn(SpriteBundle {
+		.insert(PortalDestination(LevelType::Level1));
+	commands
+		.spawn_bundle(SpriteBundle {
 			material: materials.portal_texture.clone(),
 			transform: Transform {
 				translation: Vec3::new(-7.0 * TILE_SIZE, -5.0 * TILE_SIZE, 0.0),
@@ -275,12 +327,12 @@ fn setup_level_hub(commands: &mut Commands, materials: Res<Textures>) {
 			},
 			..Default::default()
 		})
-		.with(PortalDestination(LevelType::Secret1));
+		.insert(PortalDestination(LevelType::Secret1));
 
 	let spikes_locations = [(-1.0, 1.0), (-1.0, 2.0), (-3.0, -1.0)];
 	for (spike_x_idx, spike_y_idx) in spikes_locations.iter() {
 		commands
-			.spawn(SpriteBundle {
+			.spawn_bundle(SpriteBundle {
 				material: materials.spikes_texture.clone(),
 				transform: Transform {
 					translation: Vec3::new(spike_x_idx * TILE_SIZE, spike_y_idx * TILE_SIZE, 0.0),
@@ -288,7 +340,7 @@ fn setup_level_hub(commands: &mut Commands, materials: Res<Textures>) {
 				},
 				..Default::default()
 			})
-			.with(Spikes);
+			.insert(Spikes);
 	}
 }
 
@@ -354,21 +406,17 @@ enum CollisionEvent {
 	Spikes,
 }
 
-#[derive(Default)]
-struct CollisionEventReader(EventReader<CollisionEvent>);
-
 const BRIGHTNESS_DELTA: f32 = 0.04;
 
 fn process_collision_events(
-	mut collision_event_reader: ResMut<CollisionEventReader>,
-	collision_events: Res<Events<CollisionEvent>>,
-	mut console_events: ResMut<Events<console::ConsoleEvent>>,
+	mut collision_events: EventReader<CollisionEvent>,
+	mut console_events: EventWriter<console::ConsoleEvent>,
 	mut materials: ResMut<Assets<ColorMaterial>>,
 	mut player_transform_query: Query<&mut Transform, Or<(With<Player>, With<Camera>)>>,
 	mut state: ResMut<State<AppState>>,
 	console_entities: Query<&Handle<ColorMaterial>, With<ConsoleComponent>>,
 ) {
-	for collision_event in collision_event_reader.0.iter(&collision_events) {
+	for collision_event in collision_events.iter() {
 		println!("collision event start");
 		match collision_event {
 			CollisionEvent::Spikes => {
@@ -407,7 +455,8 @@ fn change_brightness(
 	}
 
 	if all_black {
-		state.set_next(AppState::GameOver).unwrap();
+		warn!("Game over");
+		state.set(AppState::GameOver).unwrap();
 	}
 }
 

@@ -1,11 +1,11 @@
+use bevy::app::Events;
 use bevy::prelude::*;
 
 pub struct ConsolePlugin;
 
 impl Plugin for ConsolePlugin {
 	fn build(&self, app: &mut AppBuilder) {
-		app.add_resource(ConsoleEventReader::default())
-			.add_event::<ConsoleEvent>()
+		app.add_event::<ConsoleEvent>()
 			.add_startup_system(setup_console.system())
 			.add_system(console_trigger.system())
 			.add_system(add_to_console.system())
@@ -18,7 +18,7 @@ pub struct ConsoleComponent;
 
 pub struct ConsoleBuffer(String);
 
-fn setup_console(commands: &mut Commands, asset_server: Res<AssetServer>) {
+fn setup_console(mut commands: Commands, asset_server: Res<AssetServer>) {
 	let font = asset_server.load("FiraMono-Medium.ttf");
 
 	let visibility = Visible {
@@ -27,9 +27,10 @@ fn setup_console(commands: &mut Commands, asset_server: Res<AssetServer>) {
 	};
 
 	commands
-		.spawn(CameraUiBundle::default())
-		.with(ConsoleComponent)
-		.spawn(NodeBundle {
+		.spawn_bundle(UiCameraBundle::default())
+		.insert(ConsoleComponent);
+	commands
+		.spawn_bundle(NodeBundle {
 			style: Style {
 				position: Rect {
 					top: Val::Px(0.0),
@@ -47,9 +48,10 @@ fn setup_console(commands: &mut Commands, asset_server: Res<AssetServer>) {
 			visible: visibility.clone(),
 			..Default::default()
 		})
+		.insert(ConsoleComponent)
 		.with_children(|console_parent| {
 			console_parent
-				.spawn(TextBundle {
+				.spawn_bundle(TextBundle {
 					style: Style {
 						border: Rect {
 							left: Val::Px(1.0),
@@ -61,20 +63,21 @@ fn setup_console(commands: &mut Commands, asset_server: Res<AssetServer>) {
 					},
 					visible: visibility.clone(),
 					text: Text {
-						value: "".to_string(),
-						font: font.clone(),
-						style: TextStyle {
-							font_size: 40.0,
-							color: Color::BLACK,
-							alignment: TextAlignment::default(),
-						},
+						sections: vec![TextSection {
+							value: "".to_string(),
+							style: TextStyle {
+								font: font.clone(),
+								font_size: 40.0,
+								color: Color::BLACK,
+							},
+						}],
+						alignment: TextAlignment::default(),
 					},
 					..Default::default()
 				})
-				.with(ConsoleBuffer("Console\n".to_string()))
-				.with(ConsoleComponent);
-		})
-		.with(ConsoleComponent);
+				.insert(ConsoleBuffer("Console\n".to_string()))
+				.insert(ConsoleComponent);
+		});
 }
 
 fn console_trigger(
@@ -82,7 +85,7 @@ fn console_trigger(
 	mut q: Query<&mut Visible, With<ConsoleComponent>>,
 ) {
 	if kb_input.just_pressed(KeyCode::Grave) {
-		for mut console_visibility in q.iter_mut() {
+		for mut console_visibility in q.iter_mut().enumerate() {
 			console_visibility.is_visible = !console_visibility.is_visible;
 			info!(
 				"Console trigger. is_visible = {}",
@@ -98,18 +101,25 @@ fn console_trigger(
 
 fn update_console_ui(mut q: Query<(&mut Text, &ConsoleBuffer), Changed<ConsoleBuffer>>) {
 	for (mut text, console_buffer) in q.iter_mut() {
-		text.value = console_buffer.0.clone();
+		if let Some(text_section) = text.sections.iter_mut().next() {
+			text_section.value = console_buffer.0.clone()
+		}
 	}
 }
 
 fn process_console_events(
-	mut console_event_reader: ResMut<ConsoleEventReader>,
-	console_events: Res<Events<ConsoleEvent>>,
+	mut console_events: EventReader<ConsoleEvent>,
 	mut q: Query<&mut ConsoleBuffer>,
 ) {
-	for console_event in console_event_reader.0.iter(&console_events) {
+	for console_event in console_events.iter() {
 		match console_event {
 			ConsoleEvent::Log(log) => q.iter_mut().for_each(|mut buffer| {
+				if buffer.0.lines().count() >= 10 {
+					buffer.0.clear();
+				}
+				buffer.0.push_str(&log)
+			}),
+			ConsoleEvent::StaticLog(log) => q.iter_mut().for_each(|mut buffer| {
 				if buffer.0.lines().count() >= 10 {
 					buffer.0.clear();
 				}
@@ -121,13 +131,23 @@ fn process_console_events(
 
 fn add_to_console(kb_input: Res<Input<KeyCode>>, mut console_events: ResMut<Events<ConsoleEvent>>) {
 	if kb_input.just_pressed(KeyCode::Backslash) {
-		console_events.send(ConsoleEvent::Log("Hello\n".to_string()));
+		console_events.send(ConsoleEvent::from("Hello\n"));
 	}
 }
 
-#[derive(Default)]
-struct ConsoleEventReader(EventReader<ConsoleEvent>);
-
 pub enum ConsoleEvent {
 	Log(String),
+	StaticLog(&'static str),
+}
+
+impl From<String> for ConsoleEvent {
+	fn from(s: String) -> Self {
+		ConsoleEvent::Log(s)
+	}
+}
+
+impl From<&'static str> for ConsoleEvent {
+	fn from(s: &'static str) -> Self {
+		ConsoleEvent::StaticLog(s)
+	}
 }

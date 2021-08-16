@@ -1,18 +1,17 @@
 use crate::AppState;
-use bevy::{app::AppExit, prelude::*};
+use bevy::app::AppExit;
+use bevy::app::Events;
+use bevy::prelude::*;
+// use bevy::input::keyboard::KeyCode::Apps;
 
 pub struct MenuPlugin;
-
-impl MenuPlugin {
-	const STAGE: &'static str = "game_stage";
-}
 
 impl Plugin for MenuPlugin {
 	fn build(&self, app: &mut AppBuilder) {
 		app.init_resource::<ButtonMaterials>()
-			.on_state_enter(Self::STAGE, AppState::Menu, setup_menu.system())
-			.on_state_exit(Self::STAGE, AppState::Menu, destroy_menu.system())
-			.on_state_update(Self::STAGE, AppState::Menu, update_menu.system());
+			.add_system_set(SystemSet::on_enter(AppState::Menu).with_system(setup_menu.system()))
+			.add_system_set(SystemSet::on_update(AppState::Menu).with_system(update_menu.system()))
+			.add_system_set(SystemSet::on_exit(AppState::Menu).with_system(destroy_menu.system()));
 	}
 }
 
@@ -23,13 +22,13 @@ pub enum ButtonBehavior {
 }
 
 pub fn setup_menu(
-	commands: &mut Commands,
+	mut commands: Commands,
 	asset_server: Res<AssetServer>,
 	button_materials: Res<ButtonMaterials>,
 ) {
+	commands.spawn_bundle(UiCameraBundle::default());
 	commands
-		.spawn(CameraUiBundle::default())
-		.spawn(ButtonBundle {
+		.spawn_bundle(ButtonBundle {
 			style: Style {
 				size: Size::new(Val::Px(150.0), Val::Px(65.0)),
 				// center button
@@ -45,21 +44,24 @@ pub fn setup_menu(
 		})
 		.with_children(|parent| {
 			parent
-				.spawn(TextBundle {
+				.spawn_bundle(TextBundle {
 					text: Text {
-						value: "Ready?".to_string(),
-						font: asset_server.load("FiraSans-Bold.ttf"),
-						style: TextStyle {
-							font_size: 40.0,
-							color: Color::rgb(0.9, 0.9, 0.9),
-							..Default::default()
-						},
+						sections: vec![TextSection {
+							value: "Ready?".to_string(),
+							style: TextStyle {
+								font_size: 40.0,
+								color: Color::rgb(0.9, 0.9, 0.9),
+								font: asset_server.load("FiraSans-Bold.ttf"),
+							},
+						}],
+						alignment: Default::default(),
 					},
 					..Default::default()
 				})
-				.with(ButtonBehavior::Play);
-		})
-		.spawn(ButtonBundle {
+				.insert(ButtonBehavior::Play);
+		});
+	commands
+		.spawn_bundle(ButtonBundle {
 			style: Style {
 				size: Size::new(Val::Px(150.0), Val::Px(65.0)),
 				// center button
@@ -75,28 +77,30 @@ pub fn setup_menu(
 		})
 		.with_children(|parent| {
 			parent
-				.spawn(TextBundle {
+				.spawn_bundle(TextBundle {
 					text: Text {
-						value: "Bored".to_string(),
-						font: asset_server.load("FiraSans-Bold.ttf"),
-						style: TextStyle {
-							font_size: 40.0,
-							color: Color::rgb(0.9, 0.9, 0.9),
-							..Default::default()
-						},
+						sections: vec![TextSection {
+							value: "Bored".to_string(),
+							style: TextStyle {
+								font_size: 40.0,
+								color: Color::rgb(0.9, 0.9, 0.9),
+								font: asset_server.load("FiraSans-Bold.ttf"),
+							},
+						}],
+						alignment: Default::default(),
 					},
 					..Default::default()
 				})
-				.with(ButtonBehavior::Exit);
+				.insert(ButtonBehavior::Exit);
 		});
 }
 
 pub fn destroy_menu(
-	commands: &mut Commands,
+	mut commands: Commands,
 	mut interaction_query: Query<(Entity, &Button, &Children)>,
 ) {
 	for (but, _, _) in interaction_query.iter_mut() {
-		commands.despawn_recursive(but);
+		commands.entity(but).despawn_recursive();
 	}
 }
 
@@ -104,7 +108,7 @@ pub fn update_menu(
 	button_materials: Res<ButtonMaterials>,
 	mut interaction_query: Query<
 		(&Interaction, &mut Handle<ColorMaterial>, &Children),
-		(Mutated<Interaction>, With<Button>),
+		(Changed<Interaction>, With<Button>),
 	>,
 	mut text_query: Query<(&mut Text, &ButtonBehavior)>,
 	mut state: ResMut<State<AppState>>,
@@ -115,31 +119,31 @@ pub fn update_menu(
 		match *behavior {
 			ButtonBehavior::Play => match *interaction {
 				Interaction::Clicked => {
-					text.value = "Loading...".to_string();
+					text.sections.iter_mut().next().unwrap().value = "Loading...".to_string();
 					*material = button_materials.pressed.clone();
-					state.set_next(AppState::Game).unwrap();
+					state.set(AppState::Game).unwrap();
 				}
 				Interaction::Hovered => {
-					text.value = "Start!".to_string();
+					text.sections.iter_mut().next().unwrap().value = "Start!".to_string();
 					*material = button_materials.hovered.clone();
 				}
 				Interaction::None => {
-					text.value = "Ready?".to_string();
+					text.sections.iter_mut().next().unwrap().value = "Ready?".to_string();
 					*material = button_materials.normal.clone();
 				}
 			},
 			ButtonBehavior::Exit => match *interaction {
 				Interaction::Clicked => {
-					text.value = "Exiting...".to_string();
+					text.sections.iter_mut().next().unwrap().value = "Exiting...".to_string();
 					*material = button_materials.pressed.clone();
 					exit_signal.send(AppExit);
 				}
 				Interaction::Hovered => {
-					text.value = "Exit!".to_string();
+					text.sections.iter_mut().next().unwrap().value = "Exit!".to_string();
 					*material = button_materials.hovered.clone();
 				}
 				Interaction::None => {
-					text.value = "Bored?".to_string();
+					text.sections.iter_mut().next().unwrap().value = "Bored?".to_string();
 					*material = button_materials.normal.clone();
 				}
 			},
@@ -153,9 +157,9 @@ pub struct ButtonMaterials {
 	pressed: Handle<ColorMaterial>,
 }
 
-impl FromResources for ButtonMaterials {
-	fn from_resources(resources: &Resources) -> Self {
-		let mut materials = resources.get_mut::<Assets<ColorMaterial>>().unwrap();
+impl FromWorld for ButtonMaterials {
+	fn from_world(world: &mut World) -> Self {
+		let mut materials = world.get_resource_mut::<Assets<ColorMaterial>>().unwrap();
 		ButtonMaterials {
 			normal: materials.add(Color::rgb(0.15, 0.15, 0.15).into()),
 			hovered: materials.add(Color::rgb(0.25, 0.25, 0.25).into()),
