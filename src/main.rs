@@ -31,6 +31,8 @@ fn main() {
 			cursor_visible: true,
 			cursor_locked: false,
 			mode: bevy::window::WindowMode::Windowed,
+			#[cfg(target_arch = "wasm32")]
+		    canvas: None,
 		})
 		.add_plugins(DefaultPlugins)
 		.add_plugin(GamePlugin)

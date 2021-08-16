@@ -85,7 +85,7 @@ fn console_trigger(
 	mut q: Query<&mut Visible, With<ConsoleComponent>>,
 ) {
 	if kb_input.just_pressed(KeyCode::Grave) {
-		for mut console_visibility in q.iter_mut().enumerate() {
+		for mut console_visibility in q.iter_mut() {
 			console_visibility.is_visible = !console_visibility.is_visible;
 			info!(
 				"Console trigger. is_visible = {}",

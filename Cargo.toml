@@ -12,9 +12,19 @@ lto = true
 codegen-units = 1
 panic = "abort"
 
+[features]
+default = [
+    "bevy/bevy_audio", "bevy/bevy_dynamic_plugin", "bevy/bevy_gilrs", "bevy/bevy_gltf", "bevy/bevy_winit", "bevy/render", "bevy/png", "bevy/hdr", "bevy/mp3", "bevy/x11",
+    "bevy/bevy_wgpu"
+]
+web = [
+    "bevy_webgl2"
+]
+
 [dependencies]
-bevy = "0.5"
+bevy = { version = "0.5", default-features = false }
 bevy_tilemap = "0.4"
+bevy_webgl2 = { version = "0.5", optional = true }
 
 [patch.crates-io]
 #bevy = { git = "https://github.com/aQaTL/bevy.git", rev = "b93f13ad4cfd961a5adc99d77ab2317fbe20bb98" }
