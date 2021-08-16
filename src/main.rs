@@ -32,7 +32,7 @@ fn main() {
 			cursor_locked: false,
 			mode: bevy::window::WindowMode::Windowed,
 			#[cfg(target_arch = "wasm32")]
-		    canvas: None,
+			canvas: None,
 		})
 		.add_plugins(DefaultPlugins)
 		.add_plugin(GamePlugin)
@@ -60,21 +60,11 @@ impl Default for AppState {
 
 struct GamePlugin;
 
-// impl GamePlugin {
-// const STAGE: &'static str = "game_stage";
-// }
-
-// #[derive(Clone, Hash, StageLabel)]
-// enum GameStage {
-// 	GameStage
-// }
-
 impl Plugin for GamePlugin {
 	fn build(&self, app: &mut AppBuilder) {
 		app.add_startup_system(setup_game.system())
 			.insert_resource(Level::hub())
 			.add_event::<CollisionEvent>()
-			// .add_stage_after(CoreStage::Update, Self::STAGE, AppState::default())
 			.add_state(AppState::default())
 			.add_system_set(
 				SystemSet::on_enter(AppState::Game).with_system(spawn_entities.system()),
@@ -89,6 +79,9 @@ impl Plugin for GamePlugin {
 			.add_system_set(SystemSet::on_update(AppState::Game).with_system(camera_input.system()))
 			.add_system_set(
 				SystemSet::on_update(AppState::Game).with_system(color_change_input.system()),
+			)
+			.add_system_set(
+				SystemSet::on_update(AppState::Game).with_system(process_moving_entities.system()),
 			)
 			.add_system_set(
 				SystemSet::on_update(AppState::Game).with_system(detect_portal_collision.system()),
@@ -211,23 +204,33 @@ fn player_input(
 }
 
 fn player_shooting(
-	// commands: &mut Commands,
-	// materials: Res<Textures>,
+	mut commands: Commands,
+	materials: Res<Textures>,
 	mut console_events: EventWriter<console::ConsoleEvent>,
-	// mut input: ResMut<InputState>,
 	kb_input: Res<Input<KeyCode>>,
 	mouse_input: Res<Input<MouseButton>>,
 	mut mouse_motion: EventReader<MouseMotion>,
+	player_query: Query<(&Transform), (With<Player>)>,
 ) {
 	if mouse_input.just_pressed(MouseButton::Left) || kb_input.just_pressed(KeyCode::Space) {
 		console_events.send(console::ConsoleEvent::from("fire\n"));
-		// commands.spawn(SpriteBundle {
-		// 	material: materials.missile_texture.clone(),
-		// 	transform: Transform {
-		// 		..Default::default()
-		// 	},
-		// 	..Default::default()
-		// });
+
+		//TODO(aqatl): Get the player sprite size and position the missile right above the player
+		let player_translation = player_query.iter().next().unwrap().translation;
+
+		commands
+			.spawn_bundle(SpriteBundle {
+				material: materials.missile_texture.clone(),
+				transform: Transform {
+					translation: player_translation,
+					..Default::default()
+				},
+				..Default::default()
+			})
+			.insert(Missile {
+				direction: Vec3::new(0.0, 1.0, 0.0),
+				speed: Vec3::new(1.0, 1.0, 1.0),
+			});
 	}
 	for event in mouse_motion.iter() {
 		let msg = format!("{:?}\n", event.delta);
@@ -237,7 +240,13 @@ fn player_shooting(
 
 pub struct Missile {
 	direction: Vec3,
-	rotation: Vec3,
+	speed: Vec3,
+}
+
+fn process_moving_entities(mut q: Query<(&mut Transform, &Missile)>) {
+	for (mut missile_transform, missile) in q.iter_mut() {
+		missile_transform.translation += missile.direction * missile.speed;
+	}
 }
 
 fn camera_follow(
