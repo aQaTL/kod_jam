@@ -181,10 +181,7 @@ fn player_input(
 	time: Res<Time>,
 	kb_input: Res<Input<KeyCode>>,
 	level: Res<Level>,
-	mut player_translation: Query<
-		&mut Transform,
-		(Without<console::ConsoleComponent>, With<Player>),
-	>,
+	mut player_translation: Query<&mut Transform, (With<Player>,)>,
 ) {
 	let delta = MOVEMENT_DELTA * time.delta_seconds();
 	for mut transform in player_translation.iter_mut() {
@@ -235,9 +232,8 @@ fn player_shooting(
 				speed: Vec3::new(1.0, 1.0, 1.0),
 			});
 	}
-	for event in mouse_motion.iter() {
-		let msg = format!("{:?}\n", event.delta);
-		console_events.send(msg.into());
+	for _event in mouse_motion.iter() {
+		// info!("{:?}", event.delta);
 	}
 }
 
