@@ -181,10 +181,13 @@ fn player_input(
 	time: Res<Time>,
 	kb_input: Res<Input<KeyCode>>,
 	level: Res<Level>,
-	mut q: Query<(&mut Transform, &Player), (Without<console::ConsoleComponent>,)>,
+	mut player_translation: Query<
+		&mut Transform,
+		(Without<console::ConsoleComponent>, With<Player>),
+	>,
 ) {
 	let delta = MOVEMENT_DELTA * time.delta_seconds();
-	for (mut transform, _) in q.iter_mut() {
+	for mut transform in player_translation.iter_mut() {
 		if kb_input.pressed(KeyCode::W) {
 			transform.translation.y =
 				(transform.translation.y + delta).min(level.size.y / 2.0 - TILE_SIZE);
@@ -206,11 +209,11 @@ fn player_input(
 fn player_shooting(
 	mut commands: Commands,
 	materials: Res<Textures>,
-	mut console_events: EventWriter<console::ConsoleEvent>,
 	kb_input: Res<Input<KeyCode>>,
 	mouse_input: Res<Input<MouseButton>>,
 	mut mouse_motion: EventReader<MouseMotion>,
-	player_query: Query<(&Transform), (With<Player>)>,
+	mut console_events: EventWriter<console::ConsoleEvent>,
+	player_query: Query<&Transform, (With<Player>,)>,
 ) {
 	if mouse_input.just_pressed(MouseButton::Left) || kb_input.just_pressed(KeyCode::Space) {
 		console_events.send(console::ConsoleEvent::from("fire\n"));
