@@ -11,8 +11,8 @@ const TILE_SIZE: f32 = 32.0;
 
 #[bevy_main]
 fn main() {
-	App::build()
-		.add_resource(WindowDescriptor {
+	let mut app = App::build();
+	app.add_resource(WindowDescriptor {
 			width: 1280.0,
 			height: 720.0,
 			title: GAME_NAME.to_string(),
@@ -22,9 +22,12 @@ fn main() {
 			cursor_visible: true,
 			cursor_locked: false,
 			mode: bevy::window::WindowMode::Windowed,
+            ..Default::default()
 		})
-		.add_plugins(DefaultPlugins)
-		.add_plugin(GamePlugin)
+		.add_plugins(DefaultPlugins);
+	#[cfg(target_arch = "wasm32")]
+	app.add_plugin(bevy_webgl2::WebGL2Plugin);
+	app.add_plugin(GamePlugin)
 		.add_plugin(console::ConsolePlugin)
 		.add_plugin(menu::MenuPlugin)
 		.run();
