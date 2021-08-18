@@ -13,6 +13,10 @@ const TILE_SIZE: f32 = 32.0;
 
 #[bevy_main]
 fn main() {
+	if cfg!(debug_assertions) && std::env::var_os("RUST_LOG").is_none() {
+		std::env::set_var("RUST_LOG", concat!(env!("CARGO_PKG_NAME"), "=debug"));
+	}
+
 	App::build()
 		.insert_resource(WindowDescriptor {
 			width: 1280.0,
@@ -103,6 +107,8 @@ struct Textures {
 	missile_texture: Handle<ColorMaterial>,
 }
 
+struct MainCamera;
+
 fn setup_game(
 	mut commands: Commands,
 	asset_server: Res<AssetServer>,
@@ -124,13 +130,15 @@ fn setup_game(
 		.load("LowPoly_Missile_command_Game_Assets_DevilsGarage_v01/2D/missile_large.png");
 	let missile_texture: Handle<_> = materials.add(missile_texture.into());
 
-	commands.spawn_bundle(OrthographicCameraBundle {
-		transform: Transform {
-			scale: Vec3::new(0.3, 0.3, 1.0),
-			..Default::default()
-		},
-		..OrthographicCameraBundle::new_2d()
-	});
+	commands
+		.spawn_bundle(OrthographicCameraBundle {
+			transform: Transform {
+				scale: Vec3::new(0.3, 0.3, 1.0),
+				..Default::default()
+			},
+			..OrthographicCameraBundle::new_2d()
+		})
+		.insert(MainCamera);
 	commands.insert_resource(Textures {
 		player_texture,
 		ground_tile,
@@ -206,31 +214,103 @@ fn player_input(
 fn player_shooting(
 	mut commands: Commands,
 	materials: Res<Textures>,
+	material_assets: Res<Assets<ColorMaterial>>,
+	textures: Res<Assets<Texture>>,
 	kb_input: Res<Input<KeyCode>>,
+	windows: Res<Windows>,
 	mouse_input: Res<Input<MouseButton>>,
 	mut mouse_motion: EventReader<MouseMotion>,
 	mut console_events: EventWriter<console::ConsoleEvent>,
-	player_query: Query<&Transform, (With<Player>,)>,
+	player_query: Query<(&Transform, &Sprite), (With<Player>,)>,
+	camera_query: Query<&Transform, (With<MainCamera>,)>,
 ) {
 	if mouse_input.just_pressed(MouseButton::Left) || kb_input.just_pressed(KeyCode::Space) {
 		console_events.send(console::ConsoleEvent::from("fire\n"));
 
-		//TODO(aqatl): Get the player sprite size and position the missile right above the player
-		let player_translation = player_query.iter().next().unwrap().translation;
+		let window = windows.get_primary().unwrap();
+		let pos = match window.cursor_position() {
+			Some(v) => v,
+			None => {
+				error!("Can't fire without a cursor position");
+				return;
+			}
+		};
+		// debug!("Cursor pos: {:?}", pos);
+		let size = Vec2::new(window.width(), window.height());
+		// Offset the cursor from the left bottom origin to the screen center.
+		let p = pos - size / 2.0;
+		let camera_transform = camera_query.single().unwrap();
+		// Translates the cursor position into the game world coordinates.
+		let cursor_world_position =
+			camera_transform.compute_matrix() * Vec4::new(p.x, p.y, 0.0, 1.0);
+		debug!("World coords: {:?}", cursor_world_position);
+		// debug!("Player coords: {:?}", player_query.single().unwrap().translation);
 
-		commands
-			.spawn_bundle(SpriteBundle {
-				material: materials.missile_texture.clone(),
-				transform: Transform {
-					translation: player_translation,
+		//TODO(aqatl): Get the angle relative to the player, not the screen center
+
+		// Calculates the angle between the cursor and the center of the screen (consequently, the player)
+		let mut angle_relative_to_the_center = (cursor_world_position.y / cursor_world_position.x)
+			.atan()
+			.to_degrees()
+			- 90.0;
+		if cursor_world_position.x < 0.0 {
+			angle_relative_to_the_center += 180.0;
+		}
+
+		// Normalizes the cursor position, so that it only represents the direction (has length of 1).
+		let cursor_direction = cursor_world_position / cursor_world_position.length();
+
+		let missile_texture_size = textures
+			.get(
+				material_assets
+					.get(&materials.missile_texture)
+					.unwrap()
+					.texture
+					.as_ref()
+					.unwrap(),
+			)
+			.unwrap()
+			.size;
+
+		//TODO(aqatl): Get the player sprite size and position the missile right above the player
+		for (
+			Transform {
+				translation: player_translation,
+				..
+			},
+			Sprite {
+				size: player_size, ..
+			},
+		) in player_query.iter()
+		{
+			debug!("Player size: {:?}", player_size);
+			let translation = Vec3::new(
+				player_translation.x,
+				player_translation.y
+					+ (player_size.y / 2.0)
+					+ (missile_texture_size.height as f32 / 2.0),
+				0.0,
+			);
+
+			let sprite_transform = Transform {
+				translation,
+				rotation: Quat::from_rotation_z(angle_relative_to_the_center.to_radians()),
+				scale: Vec3::new(1.0, 1.0, 1.0),
+			};
+			// debug!("sprite: {:?}", sprite_transform);
+
+			commands
+				.spawn_bundle(SpriteBundle {
+					material: materials.missile_texture.clone(),
+					transform: sprite_transform,
 					..Default::default()
-				},
-				..Default::default()
-			})
-			.insert(Missile {
-				direction: Vec3::new(0.0, 1.0, 0.0),
-				speed: Vec3::new(1.0, 1.0, 1.0),
-			});
+				})
+				.insert(Missile {
+					direction: Vec3::new(cursor_direction.x, cursor_direction.y, 0.0),
+					speed: Vec3::new(1.0, 1.0, 1.0),
+					// speed: Vec3::new(0.0, 0.0, 0.0),
+				});
+		}
 	}
 	for _event in mouse_motion.iter() {
 		// info!("{:?}", event.delta);
@@ -243,6 +323,7 @@ pub struct Missile {
 }
 
 fn process_moving_entities(mut q: Query<(&mut Transform, &Missile)>) {
+	//TODO(aqatl): Delta time
 	for (mut missile_transform, missile) in q.iter_mut() {
 		missile_transform.translation += missile.direction * missile.speed;
 	}
