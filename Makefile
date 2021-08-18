@@ -14,7 +14,11 @@ release-run:
 
 web-install-requirements:
 	rustup target install wasm32-unknown-unknown
-	cargo install wasm-bindgen-cli basic-http-server --force
+	cargo install basic-http-server
+	cargo install \
+		--force \
+		--version 0.2.69 \
+		wasm-bindgen-cli
 
 web:
 	cargo build \
