@@ -312,6 +312,7 @@ fn player_shooting(
 
 fn process_moving_entities(mut q: Query<(&mut Transform, &Missile)>) {
 	//TODO(aqatl): Delta time
+    //TODO(aqatl): Destroy missiles when they collide with something, including the board borders.
 	for (mut missile_transform, missile) in q.iter_mut() {
 		missile_transform.translation += missile.direction * missile.speed;
 	}
