@@ -1,7 +1,7 @@
 use crate::components::*;
 use crate::console::ConsoleComponent;
 use bevy::app::Events;
-use bevy::input::mouse::{MouseMotion, MouseWheel};
+use bevy::input::mouse::MouseWheel;
 use bevy::math::{Vec3Swizzles, Vec4Swizzles};
 use bevy::prelude::*;
 use bevy::render::camera::Camera;
@@ -96,9 +96,30 @@ impl Plugin for GamePlugin {
 				SystemSet::on_update(AppState::Game).with_system(detect_spikes_collision.system()),
 			)
 			.add_system_set(
+				SystemSet::on_update(AppState::Game).with_system(detect_missile_collision.system()),
+			)
+			.add_system_set(
 				SystemSet::on_update(AppState::Game).with_system(process_collision_events.system()),
 			);
 	}
+}
+
+macro_rules! load_textures {
+	($asset_server: ident, $materials: ident,
+		$struct_name: ident {
+			$($var_name: ident => $file_name: expr),* $(,)?
+		}
+		$(,)?
+	) => {{
+		$(
+			let $var_name: Handle<Texture> = $asset_server.load($file_name);
+			let $var_name: Handle<_> = $materials.add($var_name.into());
+		)*
+
+		$struct_name {
+			$($var_name),*
+		}
+	}}
 }
 
 fn setup_game(
@@ -106,22 +127,6 @@ fn setup_game(
 	asset_server: Res<AssetServer>,
 	mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-	let player_texture: Handle<Texture> = asset_server.load("saitama_fit.png");
-	let player_texture: Handle<_> = materials.add(player_texture.into());
-
-	let ground_tile: Handle<Texture> = asset_server.load("ground.png");
-	let ground_tile: Handle<_> = materials.add(ground_tile.into());
-
-	let portal_texture: Handle<Texture> = asset_server.load("portal.png");
-	let portal_texture: Handle<_> = materials.add(portal_texture.into());
-
-	let spikes_texture: Handle<Texture> = asset_server.load("spikes.png");
-	let spikes_texture: Handle<_> = materials.add(spikes_texture.into());
-
-	let missile_texture: Handle<Texture> = asset_server
-		.load("LowPoly_Missile_command_Game_Assets_DevilsGarage_v01/2D/missile_large.png");
-	let missile_texture: Handle<_> = materials.add(missile_texture.into());
-
 	commands
 		.spawn_bundle(OrthographicCameraBundle {
 			transform: Transform {
@@ -131,13 +136,21 @@ fn setup_game(
 			..OrthographicCameraBundle::new_2d()
 		})
 		.insert(MainCamera);
-	commands.insert_resource(Textures {
-		player_texture,
-		ground_tile,
-		portal_texture,
-		spikes_texture,
-		missile_texture,
-	});
+
+	let textures: Textures = load_textures!(
+		asset_server,
+		materials,
+		Textures {
+			player_texture => "saitama_fit.png",
+			ground_tile => "ground.png",
+			transparent_ground_tile => "transparent_ground.png",
+			portal_texture => "portal.png",
+			spikes_texture => "spikes.png",
+			missile_texture => "LowPoly_Missile_command_Game_Assets_DevilsGarage_v01/2D/missile_large.png",
+		},
+	);
+
+	commands.insert_resource(textures);
 }
 
 fn spawn_entities(mut commands: Commands, materials: Res<Textures>, level: Res<Level>) {
@@ -164,6 +177,33 @@ fn spawn_entities(mut commands: Commands, materials: Res<Textures>, level: Res<L
 				},
 				..Default::default()
 			});
+		}
+	}
+	for j in (((level.size.y + 2.0 * TILE_SIZE) / TILE_SIZE / 2.0 * -1.0) as i32)
+		..(((level.size.y + 2.0 * TILE_SIZE) / TILE_SIZE / 2.0) as i32)
+	{
+		for i in (((level.size.x + 2.0 * TILE_SIZE) / TILE_SIZE / 2.0 * -1.0) as i32)
+			..(((level.size.x + 2.0 * TILE_SIZE) / TILE_SIZE / 2.0) as i32)
+		{
+			if j > ((level.size.y + 2.0 * TILE_SIZE) / TILE_SIZE / 2.0 * -1.0) as i32
+				&& j < (((level.size.y + 2.0 * TILE_SIZE) / TILE_SIZE / 2.0) - 1.0) as i32
+				&& i > ((level.size.x + 2.0 * TILE_SIZE) / TILE_SIZE / 2.0 * -1.0) as i32
+				&& i < (((level.size.x + 2.0 * TILE_SIZE) / TILE_SIZE / 2.0) - 1.0) as i32
+			{
+				continue;
+			}
+
+			let (j, i) = (j as f32, i as f32);
+			commands
+				.spawn_bundle(SpriteBundle {
+					material: materials.transparent_ground_tile.clone(),
+					transform: Transform {
+						translation: Vec3::new(i * 32.0, j * 32.0, 0.0),
+						..Default::default()
+					},
+					..Default::default()
+				})
+				.insert(Collidable);
 		}
 	}
 
@@ -310,10 +350,10 @@ fn player_shooting(
 	}
 }
 
-fn process_moving_entities(mut q: Query<(&mut Transform, &Missile)>) {
+fn process_moving_entities(mut missile_query: Query<(&mut Transform, &Missile)>) {
 	//TODO(aqatl): Delta time
-    //TODO(aqatl): Destroy missiles when they collide with something, including the board borders.
-	for (mut missile_transform, missile) in q.iter_mut() {
+	//TODO(aqatl): Destroy missiles when they collide with something, including the board borders.
+	for (mut missile_transform, missile) in missile_query.iter_mut() {
 		missile_transform.translation += missile.direction * missile.speed;
 	}
 }
@@ -365,7 +405,8 @@ fn setup_level_hub(mut commands: Commands, materials: Res<Textures>) {
 			},
 			..Default::default()
 		})
-		.insert(PortalDestination(LevelType::Level1));
+		.insert(PortalDestination(LevelType::Level1))
+		.insert(Collidable);
 	commands
 		.spawn_bundle(SpriteBundle {
 			material: materials.portal_texture.clone(),
@@ -375,7 +416,8 @@ fn setup_level_hub(mut commands: Commands, materials: Res<Textures>) {
 			},
 			..Default::default()
 		})
-		.insert(PortalDestination(LevelType::Secret1));
+		.insert(PortalDestination(LevelType::Secret1))
+		.insert(Collidable);
 
 	let spikes_locations = [(-1.0, 1.0), (-1.0, 2.0), (-3.0, -1.0)];
 	for (spike_x_idx, spike_y_idx) in spikes_locations.iter() {
@@ -388,7 +430,8 @@ fn setup_level_hub(mut commands: Commands, materials: Res<Textures>) {
 				},
 				..Default::default()
 			})
-			.insert(Spikes);
+			.insert(Spikes)
+			.insert(Collidable);
 	}
 }
 
@@ -443,6 +486,28 @@ fn detect_spikes_collision(
 			{
 				info!("player touched spikes");
 				collision_events.send(CollisionEvent::Spikes);
+			}
+		}
+	}
+}
+
+fn detect_missile_collision(
+	mut commands: Commands,
+	missile_q: Query<(&Transform, &Sprite, Entity), (With<Missile>,)>,
+	collidiable_q: Query<(&Transform, &Sprite, Entity), (With<Collidable>, Without<Missile>)>,
+	// mut collision_events: ResMut<Events<CollisionEvent>>,
+) {
+	for (missile_transform, missile_sprite, missile_entity) in missile_q.iter() {
+		for (collidable_transform, collidable_sprite, collidable_entity) in collidiable_q.iter() {
+			if (missile_transform.translation.x - collidable_transform.translation.x).abs() + 2.0
+				< (missile_sprite.size.x / 2.0 + collidable_sprite.size.x / 1.0)
+				&& (missile_transform.translation.y - collidable_transform.translation.y).abs()
+					+ 2.0 < (missile_sprite.size.y / 2.0 + collidable_sprite.size.y / 1.0)
+			{
+				//Should this system also send a CollisionEvent or is it for player's collisions
+				// only?
+				info!("missile collided with entity {:?}", collidable_entity);
+				commands.entity(missile_entity).despawn_recursive();
 			}
 		}
 	}
