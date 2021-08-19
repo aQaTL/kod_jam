@@ -1,6 +1,7 @@
 use crate::console::ConsoleComponent;
 use bevy::app::Events;
 use bevy::input::mouse::{MouseMotion, MouseWheel};
+use bevy::math::{Vec3Swizzles, Vec4Swizzles};
 use bevy::prelude::*;
 use bevy::render::camera::Camera;
 use bevy::window::WindowResizeConstraints;
@@ -235,7 +236,7 @@ fn player_shooting(
 				return;
 			}
 		};
-		// debug!("Cursor pos: {:?}", pos);
+		debug!("Cursor pos: {:?}", pos);
 		let size = Vec2::new(window.width(), window.height());
 		// Offset the cursor from the left bottom origin to the screen center.
 		let p = pos - size / 2.0;
@@ -245,20 +246,6 @@ fn player_shooting(
 			camera_transform.compute_matrix() * Vec4::new(p.x, p.y, 0.0, 1.0);
 		debug!("World coords: {:?}", cursor_world_position);
 		// debug!("Player coords: {:?}", player_query.single().unwrap().translation);
-
-		//TODO(aqatl): Get the angle relative to the player, not the screen center
-
-		// Calculates the angle between the cursor and the center of the screen (consequently, the player)
-		let mut angle_relative_to_the_center = (cursor_world_position.y / cursor_world_position.x)
-			.atan()
-			.to_degrees()
-			- 90.0;
-		if cursor_world_position.x < 0.0 {
-			angle_relative_to_the_center += 180.0;
-		}
-
-		// Normalizes the cursor position, so that it only represents the direction (has length of 1).
-		let cursor_direction = cursor_world_position / cursor_world_position.length();
 
 		let missile_texture_size = textures
 			.get(
@@ -272,7 +259,9 @@ fn player_shooting(
 			.unwrap()
 			.size;
 
-		//TODO(aqatl): Get the player sprite size and position the missile right above the player
+		//TODO(aqatl): Position the missile at the correct side. So, when we fire up, the missile
+		// is fired from above, when we fire left, the missile comes from the left side of the
+		// player sprite.
 		for (
 			Transform {
 				translation: player_translation,
@@ -283,7 +272,21 @@ fn player_shooting(
 			},
 		) in player_query.iter()
 		{
-			debug!("Player size: {:?}", player_size);
+			// Get a vector between the player and the cursor.
+			let mut cursor_relative_to_player =
+				cursor_world_position.xy() - player_translation.xy();
+			// Normalize the cursor position, so that it only represents the direction (has length of 1).
+			cursor_relative_to_player /= cursor_relative_to_player.length();
+			// Calculate the angle between the cursor and the center of the screen (consequently, the player).
+			// We subtract 90 deg, because the missile sprite is facing up.
+			let mut angle_relative_to_player = (cursor_relative_to_player.y
+				/ cursor_relative_to_player.x)
+				.atan()
+				.to_degrees() - 90.0;
+			if cursor_relative_to_player.x < 0.0 {
+				angle_relative_to_player += 180.0;
+			}
+
 			let translation = Vec3::new(
 				player_translation.x,
 				player_translation.y
@@ -294,7 +297,7 @@ fn player_shooting(
 
 			let sprite_transform = Transform {
 				translation,
-				rotation: Quat::from_rotation_z(angle_relative_to_the_center.to_radians()),
+				rotation: Quat::from_rotation_z(angle_relative_to_player.to_radians()),
 				scale: Vec3::new(1.0, 1.0, 1.0),
 			};
 			// debug!("sprite: {:?}", sprite_transform);
@@ -306,7 +309,11 @@ fn player_shooting(
 					..Default::default()
 				})
 				.insert(Missile {
-					direction: Vec3::new(cursor_direction.x, cursor_direction.y, 0.0),
+					direction: Vec3::new(
+						cursor_relative_to_player.x,
+						cursor_relative_to_player.y,
+						0.0,
+					),
 					speed: Vec3::new(1.0, 1.0, 1.0),
 					// speed: Vec3::new(0.0, 0.0, 0.0),
 				});
