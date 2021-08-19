@@ -1,3 +1,4 @@
+use crate::components::*;
 use crate::console::ConsoleComponent;
 use bevy::app::Events;
 use bevy::input::mouse::{MouseMotion, MouseWheel};
@@ -6,11 +7,11 @@ use bevy::prelude::*;
 use bevy::render::camera::Camera;
 use bevy::window::WindowResizeConstraints;
 
+mod components;
 mod console;
 mod menu;
 
 static GAME_NAME: &str = "TODO: Wymyśl jakąś nazwę";
-const TILE_SIZE: f32 = 32.0;
 
 #[bevy_main]
 fn main() {
@@ -100,16 +101,6 @@ impl Plugin for GamePlugin {
 	}
 }
 
-struct Textures {
-	player_texture: Handle<ColorMaterial>,
-	ground_tile: Handle<ColorMaterial>,
-	portal_texture: Handle<ColorMaterial>,
-	spikes_texture: Handle<ColorMaterial>,
-	missile_texture: Handle<ColorMaterial>,
-}
-
-struct MainCamera;
-
 fn setup_game(
 	mut commands: Commands,
 	asset_server: Res<AssetServer>,
@@ -182,8 +173,6 @@ fn spawn_entities(mut commands: Commands, materials: Res<Textures>, level: Res<L
 	}
 }
 
-struct Player;
-
 const MOVEMENT_DELTA: f32 = 100.0;
 
 fn player_input(
@@ -220,7 +209,6 @@ fn player_shooting(
 	kb_input: Res<Input<KeyCode>>,
 	windows: Res<Windows>,
 	mouse_input: Res<Input<MouseButton>>,
-	mut mouse_motion: EventReader<MouseMotion>,
 	mut console_events: EventWriter<console::ConsoleEvent>,
 	player_query: Query<(&Transform, &Sprite), (With<Player>,)>,
 	camera_query: Query<&Transform, (With<MainCamera>,)>,
@@ -259,9 +247,6 @@ fn player_shooting(
 			.unwrap()
 			.size;
 
-		//TODO(aqatl): Position the missile at the correct side. So, when we fire up, the missile
-		// is fired from above, when we fire left, the missile comes from the left side of the
-		// player sprite.
 		for (
 			Transform {
 				translation: player_translation,
@@ -277,56 +262,52 @@ fn player_shooting(
 				cursor_world_position.xy() - player_translation.xy();
 			// Normalize the cursor position, so that it only represents the direction (has length of 1).
 			cursor_relative_to_player /= cursor_relative_to_player.length();
-			// Calculate the angle between the cursor and the center of the screen (consequently, the player).
-			// We subtract 90 deg, because the missile sprite is facing up.
-			let mut angle_relative_to_player = (cursor_relative_to_player.y
+			// Calculate the angle between the cursor the player.
+			let mut cursor_angle_relative_to_player = (cursor_relative_to_player.y
 				/ cursor_relative_to_player.x)
 				.atan()
-				.to_degrees() - 90.0;
+				.to_degrees();
 			if cursor_relative_to_player.x < 0.0 {
-				angle_relative_to_player += 180.0;
+				cursor_angle_relative_to_player += 180.0;
 			}
 
-			let translation = Vec3::new(
-				player_translation.x,
-				player_translation.y
-					+ (player_size.y / 2.0)
-					+ (missile_texture_size.height as f32 / 2.0),
+			let missile_direction = Vec3::new(
+				cursor_relative_to_player.x,
+				cursor_relative_to_player.y,
 				0.0,
 			);
 
-			let sprite_transform = Transform {
-				translation,
-				rotation: Quat::from_rotation_z(angle_relative_to_player.to_radians()),
-				scale: Vec3::new(1.0, 1.0, 1.0),
-			};
-			// debug!("sprite: {:?}", sprite_transform);
+			// We subtract 90 deg, because the missile sprite is facing up.
+			let missile_angle_relative_to_player =
+				(cursor_angle_relative_to_player - 90.0).to_radians();
+			cursor_angle_relative_to_player = cursor_angle_relative_to_player.to_radians();
+
+			// Radius of the player's shooting circle.
+			let r = player_size.y / 2.0 + missile_texture_size.height as f32 / 2.0;
+			// Calculate missile position at the circle from the cursor angle
+			let missile_translation = Vec3::new(
+				r * cursor_angle_relative_to_player.cos() + player_translation.x,
+				r * cursor_angle_relative_to_player.sin() + player_translation.y,
+				0.0,
+			);
 
 			commands
 				.spawn_bundle(SpriteBundle {
 					material: materials.missile_texture.clone(),
-					transform: sprite_transform,
+					transform: Transform {
+						translation: missile_translation,
+						rotation: Quat::from_rotation_z(missile_angle_relative_to_player),
+						scale: Vec3::new(1.0, 1.0, 1.0),
+					},
 					..Default::default()
 				})
 				.insert(Missile {
-					direction: Vec3::new(
-						cursor_relative_to_player.x,
-						cursor_relative_to_player.y,
-						0.0,
-					),
+					direction: missile_direction,
 					speed: Vec3::new(1.0, 1.0, 1.0),
 					// speed: Vec3::new(0.0, 0.0, 0.0),
 				});
 		}
 	}
-	for _event in mouse_motion.iter() {
-		// info!("{:?}", event.delta);
-	}
-}
-
-pub struct Missile {
-	direction: Vec3,
-	speed: Vec3,
 }
 
 fn process_moving_entities(mut q: Query<(&mut Transform, &Missile)>) {
@@ -371,38 +352,6 @@ fn camera_input(
 		}
 	}
 }
-
-struct Level {
-	size: Vec2,
-	l_type: LevelType,
-}
-
-impl Default for Level {
-	fn default() -> Self {
-		Self::hub()
-	}
-}
-
-#[derive(Debug, Copy, Clone)]
-enum LevelType {
-	Hub,
-	Secret1,
-	Level1,
-}
-
-impl Level {
-	fn hub() -> Self {
-		Level {
-			size: (15.0 * TILE_SIZE, 10.0 * TILE_SIZE).into(),
-			l_type: LevelType::Hub,
-		}
-	}
-}
-
-#[derive(Debug, Copy, Clone)]
-struct PortalDestination(LevelType);
-
-struct Spikes;
 
 fn setup_level_hub(mut commands: Commands, materials: Res<Textures>) {
 	info!("Spawning hub level entities");
