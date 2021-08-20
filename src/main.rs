@@ -498,10 +498,10 @@ fn detect_missile_collision(
 ) {
 	for (missile_transform, missile_sprite, missile_entity) in missile_q.iter() {
 		for (collidable_transform, collidable_sprite, collidable_entity) in collidiable_q.iter() {
-			if (missile_transform.translation.x - collidable_transform.translation.x).abs() + 2.0
+			if (missile_transform.translation.x - collidable_transform.translation.x).abs() * 2.1
 				< (missile_sprite.size.x / 2.0 + collidable_sprite.size.x / 1.0)
 				&& (missile_transform.translation.y - collidable_transform.translation.y).abs()
-					+ 2.0 < (missile_sprite.size.y / 2.0 + collidable_sprite.size.y / 1.0)
+					* 2.1 < (missile_sprite.size.y / 2.0 + collidable_sprite.size.y / 1.0)
 			{
 				//Should this system also send a CollisionEvent or is it for player's collisions
 				// only?
